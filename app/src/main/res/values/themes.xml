@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.AhadMixLED" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.AhadMixLED" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- Full screen settings -->
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+
+        <!-- Keep screen on -->
+        <item name="android:keepScreenOn">true</item>
+
+        <!-- Primary brand color -->
+        <item name="colorPrimary">@android:color/black</item>
+        <item name="colorPrimaryDark">@android:color/black</item>
+        <item name="colorAccent">@android:color/white</item>
+
+        <!-- Status bar color -->
+        <item name="android:statusBarColor">@android:color/black</item>
+
+        <!-- Background -->
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>
