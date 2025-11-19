@@ -94,7 +94,6 @@ lint/tmp/
 # Project exclude paths
 /.gradle/
 # /app/
-/gradle/wrapper/
 
 # Backup files
 *~
