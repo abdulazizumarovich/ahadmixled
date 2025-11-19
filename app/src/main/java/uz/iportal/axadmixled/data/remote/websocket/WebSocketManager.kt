@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import okhttp3.*
 import timber.log.Timber
+import uz.iportal.axadmixled.core.constants.ApiConstants
 import uz.iportal.axadmixled.data.local.preferences.AuthPreferences
 import uz.iportal.axadmixled.domain.model.*
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
@@ -41,7 +42,8 @@ class WebSocketManager @Inject constructor(
             return
         }
 
-        val url = "${Constants.WEBSOCKET_URL}?token=$token&sn_number=$snNumber"
+        val url = ApiConstants.wsUrl(snNumber, token)
+        Timber.d("Connecting to WebSocket: $url")
         val request = Request.Builder().url(url).build()
 
         webSocket?.close(1000, "Reconnecting")
