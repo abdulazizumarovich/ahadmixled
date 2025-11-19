@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Ahad Mix LED</string>
+    <string name="app_title">AdPlayer Login</string>
 
     <!-- Splash Screen -->
     <string name="initializing">Initializing...</string>
@@ -8,6 +9,8 @@
     <string name="username">Username</string>
     <string name="password">Password</string>
     <string name="login">Login</string>
+    <string name="sign_in">Sign In</string>
+    <string name="sign_in_subtitle">Sign in to continue</string>
 
     <!-- Player Screen -->
     <string name="media_image">Media Image</string>
