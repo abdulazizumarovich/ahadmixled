@@ -8,12 +8,12 @@ plugins {
 
 android {
     namespace = "uz.iportal.axadmixled"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "uz.iportal.axadmixled"
         minSdk = 21
-        targetSdk = 35
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -92,6 +92,10 @@ dependencies {
     // Dependency Injection (Hilt)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // Hilt WorkManager Integration
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Encrypted SharedPreferences
     implementation(libs.androidx.security.crypto)

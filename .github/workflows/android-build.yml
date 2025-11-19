@@ -42,19 +42,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Validate Gradle wrapper
+        uses: gradle/wrapper-validation-action@v2
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace --no-daemon
+
       - name: Run Lint
-        run: ./gradlew lintDebug
+        run: ./gradlew lintDebug --no-daemon
         continue-on-error: true
 
       - name: Run Tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest --no-daemon
         continue-on-error: true
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
-
       - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace --no-daemon
         continue-on-error: true
 
       - name: Upload Debug APK

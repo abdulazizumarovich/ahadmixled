@@ -1,6 +1,6 @@
 [versions]
-agp = "8.7.3"
-kotlin = "2.0.21"
+agp = "8.5.2"
+kotlin = "2.0.0"
 coreKtx = "1.15.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -20,7 +20,8 @@ okhttp = "4.12.0"
 gson = "2.11.0"
 exoplayer = "2.19.1"
 coil = "2.7.0"
-hilt = "2.52"
+hilt = "2.51.1"
+hiltWork = "1.2.0"
 securityCrypto = "1.1.0-alpha06"
 work = "2.10.0"
 timber = "5.0.1"
@@ -62,6 +63,8 @@ exoplayer-ui = { group = "com.google.android.exoplayer", name = "exoplayer-ui", 
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", version.ref = "hilt" }
+androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "hiltWork" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "hiltWork" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "timber" }
@@ -71,4 +74,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
-ksp = { id = "com.google.devtools.ksp", version = "2.0.21-1.0.28" }
+ksp = { id = "com.google.devtools.ksp", version = "2.0.0-1.0.24" }
