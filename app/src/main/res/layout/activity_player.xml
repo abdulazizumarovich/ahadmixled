@@ -7,8 +7,8 @@
     android:keepScreenOn="true"
     tools:context=".presentation.player.PlayerActivity">
 
-    <!-- ExoPlayer View for Videos -->
-    <com.google.android.exoplayer2.ui.PlayerView
+    <!-- Media3 PlayerView for Videos -->
+    <androidx.media3.ui.PlayerView
         android:id="@+id/playerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
