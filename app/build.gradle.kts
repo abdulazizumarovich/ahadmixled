@@ -39,6 +39,7 @@ android {
     buildFeatures {
         compose = true
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -81,10 +82,10 @@ dependencies {
     // JSON
     implementation(libs.gson)
 
-    // Media Player (ExoPlayer)
-    implementation(libs.exoplayer)
-    implementation(libs.exoplayer.core)
-    implementation(libs.exoplayer.ui)
+    // Media Player (Media3/ExoPlayer)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.common)
+    implementation(libs.media3.ui)
 
     // Image Loading
     implementation(libs.coil)
