@@ -1,7 +1,6 @@
 package uz.iportal.axadmixled.data.repository
 
 import android.os.Build
-import android.provider.Settings
 import timber.log.Timber
 import uz.iportal.axadmixled.data.local.database.dao.DeviceDao
 import uz.iportal.axadmixled.data.local.database.dao.PlaylistDao
@@ -12,7 +11,7 @@ import uz.iportal.axadmixled.domain.model.Device
 import uz.iportal.axadmixled.domain.model.DeviceRegisterRequest
 import uz.iportal.axadmixled.domain.model.DeviceRegisterResponse
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
-import java.util.UUID
+import uz.iportal.axadmixled.util.DeviceInfoProvider
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,7 +20,8 @@ class DeviceRepositoryImpl @Inject constructor(
     private val deviceApi: DeviceApi,
     private val deviceDao: DeviceDao,
     private val playlistDao: PlaylistDao,
-    private val authPreferences: AuthPreferences
+    private val authPreferences: AuthPreferences,
+    private val deviceInfoProvider: DeviceInfoProvider
 ) : DeviceRepository {
 
     override suspend fun registerDevice(): Result<DeviceRegisterResponse> {
@@ -177,27 +177,9 @@ class DeviceRepositoryImpl @Inject constructor(
             Timber.w("Invalid SN detected: '$existingSn', regenerating...")
         }
 
-        // Generate unique SN based on Android ID (matching Flutter implementation)
-        val androidId = try {
-            Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ANDROID_ID
-            )
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to get ANDROID_ID")
-            null
-        }
-
-        // Use plain ANDROID_ID like Flutter does (no "LED-" prefix)
-        val snNumber = if (!androidId.isNullOrEmpty() && androidId != "9774d56d682e549c") {
-            Timber.d("Generated SN from ANDROID_ID: $androidId")
-            androidId  // Plain ANDROID_ID, matching Flutter's androidInfo.id
-        } else {
-            // Fallback: generate UUID if ANDROID_ID not available (emulator case)
-            val uuid = UUID.randomUUID().toString().replace("-", "").take(16)
-            Timber.w("ANDROID_ID not available, using UUID: $uuid")
-            uuid
-        }
+        // Generate unique SN using DeviceInfoProvider (matches Flutter implementation)
+        val snNumber = deviceInfoProvider.generateSerialNumber()
+        Timber.d("Generated new device SN: $snNumber")
 
         authPreferences.saveDeviceSnNumber(snNumber)
         return snNumber
