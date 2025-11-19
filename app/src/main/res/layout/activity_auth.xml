@@ -10,7 +10,11 @@
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="40dp">
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
+        android:paddingTop="40dp"
+        android:paddingBottom="60dp"
+        android:clipToPadding="false">
 
         <!-- TV Icon -->
         <ImageView
@@ -55,12 +59,15 @@
 
         <!-- Content Container (max width 400dp) -->
         <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/contentContainer"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="40dp"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/tvSubtitle"
+            app:layout_constraintVertical_bias="0.0"
             app:layout_constraintWidth_max="400dp">
 
             <!-- Username Input -->
@@ -137,6 +144,7 @@
                 android:layout_width="0dp"
                 android:layout_height="56dp"
                 android:layout_marginTop="30dp"
+                android:layout_marginBottom="20dp"
                 android:text="@string/sign_in"
                 android:textAllCaps="false"
                 android:textColor="@color/white"
@@ -144,9 +152,11 @@
                 android:textStyle="bold"
                 app:backgroundTint="@color/cyan_accent"
                 app:cornerRadius="10dp"
+                app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tilPassword" />
+                app:layout_constraintTop_toBottomOf="@+id/tilPassword"
+                app:layout_constraintVertical_bias="0.0" />
 
             <!-- Loading Progress -->
             <ProgressBar
