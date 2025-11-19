@@ -22,6 +22,7 @@ object ApiConstants {
 
     // Device Endpoints
     const val DEVICE_REGISTER = "/admin/cloud/device/register/"
+    const val DEVICE_INFO = "/admin/cloud/device/{sn_number}/"
 
     // Video/Playlist Endpoints
     fun playlist(deviceId: String) = "/admin/cloud/playlists?sn_number=$deviceId"
