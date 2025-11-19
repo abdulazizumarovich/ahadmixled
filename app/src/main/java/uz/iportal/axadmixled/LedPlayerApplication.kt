@@ -1,16 +1,25 @@
 package uz.iportal.axadmixled
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
 import uz.iportal.axadmixled.util.StorageMonitor
+import uz.iportal.axadmixled.workers.WorkManagerInitializer
 import javax.inject.Inject
 
 @HiltAndroidApp
-class LedPlayerApplication : Application() {
+class LedPlayerApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var storageMonitor: StorageMonitor
+
+    @Inject
+    lateinit var workManagerInitializer: WorkManagerInitializer
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
 
     override fun onCreate() {
         super.onCreate()
@@ -32,10 +41,22 @@ class LedPlayerApplication : Application() {
 
         // Start storage monitoring
         storageMonitor.startMonitoring()
+
+        // Initialize WorkManager for background tasks
+        workManagerInitializer.initialize()
+
+        Timber.d("LedPlayerApplication initialization complete")
     }
 
     override fun onTerminate() {
         storageMonitor.stopMonitoring()
+        workManagerInitializer.cancelAll()
         super.onTerminate()
     }
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .setMinimumLoggingLevel(if (BuildConfig.DEBUG) android.util.Log.DEBUG else android.util.Log.ERROR)
+            .build()
 }

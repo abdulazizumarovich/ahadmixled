@@ -1,0 +1,157 @@
+name: Android Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run Lint
+        run: ./gradlew lintDebug
+        continue-on-error: true
+
+      - name: Run Tests
+        run: ./gradlew testDebugUnitTest
+        continue-on-error: true
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease --stacktrace
+        continue-on-error: true
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: led-player-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: led-player-release-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30
+        continue-on-error: true
+
+      - name: Upload Lint Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-results
+          path: app/build/reports/lint-results-debug.html
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+        continue-on-error: true
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: led-player-debug-apk
+          path: artifacts/
+
+      - name: Get version from gradle
+        id: get_version
+        run: |
+          VERSION_NAME=$(grep "versionName" app/build.gradle.kts | awk '{print $3}' | tr -d '"')
+          VERSION_CODE=$(grep "versionCode" app/build.gradle.kts | awk '{print $3}')
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.version_name }}-${{ github.run_number }}
+          release_name: LED Player v${{ steps.get_version.outputs.version_name }} (Build ${{ github.run_number }})
+          body: |
+            ## Android LED Player Release
+
+            **Version:** ${{ steps.get_version.outputs.version_name }}
+            **Build:** ${{ github.run_number }}
+            **Commit:** ${{ github.sha }}
+
+            ### Changes
+            ${{ github.event.head_commit.message }}
+
+            ### Installation
+            Download the APK below and install on your Android device.
+
+            ### Requirements
+            - Android 5.0 (API 21) or higher
+            - Internet connection for initial setup
+            - Storage permission for media files
+          draft: false
+          prerelease: false
+        continue-on-error: true
+
+      - name: Upload Release APK
+        uses: actions/upload-release-asset@v1
+        if: steps.create_release.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/app-debug.apk
+          asset_name: led-player-v${{ steps.get_version.outputs.version_name }}.apk
+          asset_content_type: application/vnd.android.package-archive
+        continue-on-error: true
