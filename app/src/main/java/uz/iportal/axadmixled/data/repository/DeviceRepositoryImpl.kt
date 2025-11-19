@@ -161,8 +161,20 @@ class DeviceRepositoryImpl @Inject constructor(
 
     private fun getOrGenerateSnNumber(): String {
         val existingSn = authPreferences.getDeviceSnNumber()
-        if (!existingSn.isNullOrEmpty()) {
+
+        // Check if existing SN is valid (not the old "LED-" prefixed format or literal "LED-ANDROID_ID")
+        val isValidSn = !existingSn.isNullOrEmpty() &&
+                        !existingSn.startsWith("LED-") &&
+                        existingSn != "LED-ANDROID_ID" &&
+                        existingSn != "ANDROID_ID"
+
+        if (isValidSn) {
+            Timber.d("Using existing valid SN: $existingSn")
             return existingSn
+        }
+
+        if (!existingSn.isNullOrEmpty()) {
+            Timber.w("Invalid SN detected: '$existingSn', regenerating...")
         }
 
         // Generate unique SN based on Android ID (matching Flutter implementation)
@@ -178,13 +190,15 @@ class DeviceRepositoryImpl @Inject constructor(
 
         // Use plain ANDROID_ID like Flutter does (no "LED-" prefix)
         val snNumber = if (!androidId.isNullOrEmpty() && androidId != "9774d56d682e549c") {
+            Timber.d("Generated SN from ANDROID_ID: $androidId")
             androidId  // Plain ANDROID_ID, matching Flutter's androidInfo.id
         } else {
             // Fallback: generate UUID if ANDROID_ID not available (emulator case)
-            UUID.randomUUID().toString().replace("-", "").take(16)
+            val uuid = UUID.randomUUID().toString().replace("-", "").take(16)
+            Timber.w("ANDROID_ID not available, using UUID: $uuid")
+            uuid
         }
 
-        Timber.d("Generated device SN: $snNumber")
         authPreferences.saveDeviceSnNumber(snNumber)
         return snNumber
     }
