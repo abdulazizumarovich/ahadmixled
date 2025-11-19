@@ -33,16 +33,29 @@ class DeviceRepositoryImpl @Inject constructor(
             }
 
             val snNumber = getOrGenerateSnNumber()
+            val totalStorage = getTotalStorage()
+            val freeStorage = getFreeStorage()
+
             Timber.d("Registering device with SN: $snNumber")
+            Timber.d("Device info - Brand: ${Build.BRAND}, Manufacturer: ${Build.MANUFACTURER}, Model: ${Build.MODEL}")
 
             val request = DeviceRegisterRequest(
                 snNumber = snNumber,
-                name = "${Build.MANUFACTURER} ${Build.MODEL}",
+                brand = Build.BRAND,
                 model = Build.MODEL,
-                osVersion = "Android ${Build.VERSION.RELEASE}",
+                manufacturer = Build.MANUFACTURER,
+                osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
                 screenResolution = getScreenResolution(),
-                storageCapacity = getTotalStorage()
+                totalStorage = formatStorage(totalStorage),
+                freeStorage = formatStorage(freeStorage),
+                macAddress = getMacAddress(),
+                appVersion = getAppVersion(),
+                ipAddress = getIpAddress(),
+                brightness = 50,
+                volume = 50
             )
+
+            Timber.d("Sending device registration request: $request")
 
             val response = deviceApi.registerDevice(
                 token = "Bearer $accessToken",
@@ -57,9 +70,9 @@ class DeviceRepositoryImpl @Inject constructor(
                 model = Build.MODEL,
                 androidVersion = "Android ${Build.VERSION.RELEASE}",
                 screenResolution = getScreenResolution(),
-                storageTotal = getTotalStorage(),
-                storageFree = getFreeStorage(),
-                storageUsed = getTotalStorage() - getFreeStorage(),
+                storageTotal = totalStorage,
+                storageFree = freeStorage,
+                storageUsed = totalStorage - freeStorage,
                 isActive = response.isActive,
                 createdAt = response.createdAt,
                 registeredAt = System.currentTimeMillis()
@@ -69,10 +82,10 @@ class DeviceRepositoryImpl @Inject constructor(
             // Save SN number in preferences
             authPreferences.saveDeviceSnNumber(snNumber)
 
-            Timber.d("Device registered successfully: ${response.name}")
+            Timber.d("Device registered successfully: ${response.name} (ID: ${response.id})")
             Result.success(response)
         } catch (e: Exception) {
-            Timber.e(e, "Device registration failed")
+            Timber.e(e, "Device registration failed: ${e.message}")
             Result.failure(e)
         }
     }
@@ -148,21 +161,42 @@ class DeviceRepositoryImpl @Inject constructor(
 
     private fun getOrGenerateSnNumber(): String {
         val existingSn = authPreferences.getDeviceSnNumber()
-        if (!existingSn.isNullOrEmpty()) {
+
+        // Check if existing SN is valid (not the old "LED-" prefixed format or literal "LED-ANDROID_ID")
+        val isValidSn = !existingSn.isNullOrEmpty() &&
+                        !existingSn.startsWith("LED-") &&
+                        existingSn != "LED-ANDROID_ID" &&
+                        existingSn != "ANDROID_ID"
+
+        if (isValidSn) {
+            Timber.d("Using existing valid SN: $existingSn")
             return existingSn
         }
 
-        // Generate unique SN based on Android ID or UUID
+        if (!existingSn.isNullOrEmpty()) {
+            Timber.w("Invalid SN detected: '$existingSn', regenerating...")
+        }
+
+        // Generate unique SN based on Android ID (matching Flutter implementation)
         val androidId = try {
-            Settings.Secure.ANDROID_ID
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
         } catch (e: Exception) {
+            Timber.e(e, "Failed to get ANDROID_ID")
             null
         }
 
+        // Use plain ANDROID_ID like Flutter does (no "LED-" prefix)
         val snNumber = if (!androidId.isNullOrEmpty() && androidId != "9774d56d682e549c") {
-            "LED-${androidId.uppercase()}"
+            Timber.d("Generated SN from ANDROID_ID: $androidId")
+            androidId  // Plain ANDROID_ID, matching Flutter's androidInfo.id
         } else {
-            "LED-${UUID.randomUUID().toString().replace("-", "").take(16).uppercase()}"
+            // Fallback: generate UUID if ANDROID_ID not available (emulator case)
+            val uuid = UUID.randomUUID().toString().replace("-", "").take(16)
+            Timber.w("ANDROID_ID not available, using UUID: $uuid")
+            uuid
         }
 
         authPreferences.saveDeviceSnNumber(snNumber)
@@ -195,6 +229,69 @@ class DeviceRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Timber.e(e, "Failed to get free storage")
             0L
+        }
+    }
+
+    private fun formatStorage(bytes: Long): String {
+        return try {
+            val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+            String.format("%.2f GB", gb)
+        } catch (e: Exception) {
+            "0 GB"
+        }
+    }
+
+    private fun getMacAddress(): String? {
+        return try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (networkInterface.name.equals("wlan0", ignoreCase = true)) {
+                    val mac = networkInterface.hardwareAddress
+                    if (mac != null) {
+                        val macAddress = StringBuilder()
+                        for (byte in mac) {
+                            macAddress.append(String.format("%02X:", byte))
+                        }
+                        if (macAddress.isNotEmpty()) {
+                            macAddress.deleteCharAt(macAddress.length - 1)
+                        }
+                        return macAddress.toString()
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get MAC address")
+            null
+        }
+    }
+
+    private fun getAppVersion(): String {
+        return try {
+            uz.iportal.axadmixled.BuildConfig.VERSION_NAME
+        } catch (e: Exception) {
+            "1.0"
+        }
+    }
+
+    private fun getIpAddress(): String? {
+        return try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
+                        return address.hostAddress
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get IP address")
+            null
         }
     }
 }

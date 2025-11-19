@@ -46,19 +46,23 @@ class AuthViewModel @Inject constructor(
                 val result = authRepository.login(request)
 
                 result.onSuccess { tokens ->
-                    Timber.d("Login successful")
+                    Timber.d("Login successful, saving tokens")
                     authRepository.saveTokens(tokens)
 
                     // Register device after successful login
-                    try {
-                        Timber.d("Registering device")
-                        deviceRepository.registerDevice()
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to register device, continuing anyway")
-                    }
+                    Timber.d("Registering device...")
+                    val registerResult = deviceRepository.registerDevice()
 
-                    _loginState.value = LoginState.Success
-                    _navigationEvent.emit(NavigationEvent.NavigateToPlayer)
+                    registerResult.onSuccess { response ->
+                        Timber.d("Device registered successfully: ${response.name} (ID: ${response.id})")
+                        _loginState.value = LoginState.Success
+                        _navigationEvent.emit(NavigationEvent.NavigateToPlayer)
+                    }.onFailure { error ->
+                        Timber.e(error, "Device registration failed: ${error.message}")
+                        _loginState.value = LoginState.Error(
+                            "Device registration failed: ${error.message ?: "Unknown error"}"
+                        )
+                    }
                 }.onFailure { error ->
                     Timber.e(error, "Login failed")
                     _loginState.value = LoginState.Error(

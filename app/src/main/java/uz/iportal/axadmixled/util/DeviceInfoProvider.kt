@@ -17,7 +17,7 @@ class DeviceInfoProvider @Inject constructor(
 ) {
     /**
      * Generate unique serial number for the device
-     * Uses Android ID if available, otherwise generates UUID
+     * Uses Android ID (matching Flutter implementation - no prefix)
      */
     fun generateSerialNumber(): String {
         return try {
@@ -27,13 +27,14 @@ class DeviceInfoProvider @Inject constructor(
             )
             if (androidId.isNullOrBlank() || androidId == "9774d56d682e549c") {
                 // Fallback to UUID if Android ID is not available or is the emulator ID
-                "LED-${UUID.randomUUID().toString().take(12).uppercase()}"
+                UUID.randomUUID().toString().replace("-", "").take(16)
             } else {
-                "LED-${androidId.uppercase()}"
+                // Plain ANDROID_ID, matching Flutter's androidInfo.id
+                androidId
             }
         } catch (e: Exception) {
             // If all else fails, generate random UUID
-            "LED-${UUID.randomUUID().toString().take(12).uppercase()}"
+            UUID.randomUUID().toString().replace("-", "").take(16)
         }
     }
 
