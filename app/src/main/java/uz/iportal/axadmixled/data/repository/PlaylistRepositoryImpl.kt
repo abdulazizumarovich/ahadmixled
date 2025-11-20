@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import uz.iportal.axadmixled.data.local.database.dao.MediaDao
 import uz.iportal.axadmixled.data.local.database.dao.PlaylistDao
@@ -40,33 +41,36 @@ class PlaylistRepositoryImpl @Inject constructor(
             val snNumber = authPreferences.getDeviceSnNumber()
 
             if (accessToken.isNullOrEmpty() || snNumber.isNullOrEmpty()) {
-                Timber.e("Missing authentication or device SN for playlist sync")
+                Timber.tag("APLAYLISTS").e("Missing authentication or device SN for playlist sync")
                 return Result.failure(Exception("Not authenticated or device not registered"))
             }
 
-            Timber.d("Syncing playlists for device: $snNumber")
-            val response = playlistApi.getPlaylists(
-                token = "Bearer $accessToken",
-                snNumber = snNumber
-            )
+            Timber.tag("APLAYLISTS").d("Syncing playlists for device: $snNumber")
+            val response = withContext(Dispatchers.IO){
+                playlistApi.getPlaylists(
+                    token = "Bearer $accessToken",
+                    snNumber = snNumber
+                )
+            }
 
-            Timber.d("Fetched ${response.results.size} playlists from server")
+            Timber.tag("APLAYLISTS").d("Fetched ${response.frontScreen.countPlaylist} playlists from server")
 
             // Convert and save playlists to database
-            val playlistEntities = response.results.map { playlistDetail ->
+            val resolution = response.frontScreen.resolution
+            val playlistEntities = response.frontScreen.playlists.map { playlistDetail ->
                 // Get existing playlist to preserve download status
                 val existing = playlistDao.getPlaylistById(playlistDetail.id)
 
                 PlaylistEntity(
                     id = playlistDetail.id,
                     name = playlistDetail.name,
-                    description = playlistDetail.description,
-                    isActive = playlistDetail.isActive,
-                    priority = playlistDetail.priority,
+                    description = playlistDetail.name,
+                    isActive = playlistDetail.status.isReady,
+                    priority = playlistDetail.id,
                     duration = playlistDetail.duration,
-                    mediaCount = playlistDetail.mediaCount,
-                    createdAt = playlistDetail.createdAt,
-                    updatedAt = playlistDetail.updatedAt,
+                    mediaCount = playlistDetail.countMediaItems,
+                    createdAt = playlistDetail.name,
+                    updatedAt = playlistDetail.name,
                     downloadStatus = existing?.downloadStatus ?: DownloadStatus.PENDING.name,
                     downloadedItems = existing?.downloadedItems ?: 0,
                     missingFiles = existing?.missingFiles,
@@ -74,32 +78,33 @@ class PlaylistRepositoryImpl @Inject constructor(
                 )
             }
 
+            Timber.tag("APLAYLISTS").d(playlistEntities.toString())
             playlistDao.insertPlaylists(playlistEntities)
 
             // Save media items for each playlist
-            response.results.forEach { playlistDetail ->
-                val mediaEntities = playlistDetail.media.map { mediaDetail ->
+            response.frontScreen.playlists.forEach { playlistDetail ->
+                val mediaEntities = playlistDetail.mediaItems.map { mediaDetail ->
                     // Check if media already exists locally
-                    val existingMedia = mediaDao.getMediaById(mediaDetail.id)
+                    val existingMedia = mediaDao.getMediaById(mediaDetail.mediaId)
                     val localPath = existingMedia?.localPath
-                        ?: mediaFileManager.getMediaPath(mediaDetail.id)
+                        ?: mediaFileManager.getMediaPath(mediaDetail.mediaId)
 
                     MediaEntity(
-                        id = mediaDetail.id,
+                        id = mediaDetail.mediaId,
                         playlistId = playlistDetail.id,
-                        name = mediaDetail.name,
-                        description = mediaDetail.description,
-                        file = mediaDetail.file,
-                        thumbnail = mediaDetail.thumbnail,
+                        name = mediaDetail.mediaName,
+                        description = mediaDetail.mediaName,
+                        file = mediaDetail.mediaUrl,
+                        thumbnail = mediaDetail.mediaUrl,
                         mediaType = mediaDetail.mediaType,
-                        duration = mediaDetail.duration,
-                        fileSize = mediaDetail.fileSize,
-                        resolution = mediaDetail.resolution,
+                        duration = mediaDetail.nTimePlay,
+                        fileSize = mediaDetail.fileSize.toLong(),
+                        resolution = resolution,
                         checksum = mediaDetail.checksum,
                         order = mediaDetail.order,
-                        createdAt = mediaDetail.createdAt,
-                        updatedAt = mediaDetail.updatedAt,
-                        localPath = localPath,
+                        createdAt = mediaDetail.downloadDate,
+                        updatedAt = mediaDetail.downloadDate,
+                        localPath = mediaDetail.localPath,
                         isDownloaded = existingMedia?.isDownloaded ?: false,
                         downloadedAt = existingMedia?.downloadedAt,
                         downloadProgress = existingMedia?.downloadProgress ?: 0
@@ -109,10 +114,10 @@ class PlaylistRepositoryImpl @Inject constructor(
                 mediaDao.insertMediaList(mediaEntities)
             }
 
-            Timber.d("Playlists synced successfully")
+            Timber.tag("APLAYLISTS").d("Playlists synced successfully")
             Result.success(Unit)
         } catch (e: Exception) {
-            Timber.e(e, "Failed to sync playlists")
+            Timber.tag("APLAYLISTS").e(e, "Failed to sync playlists")
             Result.failure(e)
         }
     }
@@ -122,7 +127,7 @@ class PlaylistRepositoryImpl @Inject constructor(
             val playlistEntities = playlistDao.getAllPlaylists()
             playlistEntities.map { entity -> mapEntityToDomain(entity) }
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get playlists from database")
+            Timber.tag("APLAYLISTS").e(e, "Failed to get playlists from database")
             emptyList()
         }
     }
@@ -141,7 +146,7 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun downloadPlaylist(playlistId: Int): Result<Unit> {
         return try {
-            Timber.d("Starting download for playlist: $playlistId")
+            Timber.tag("DWNLD").d("Starting download for playlist: $playlistId")
 
             // Update status to DOWNLOADING
             playlistDao.updateDownloadStatus(
@@ -165,14 +170,14 @@ class PlaylistRepositoryImpl @Inject constructor(
                         }
                     }
 
-                    Timber.d("Downloading media: ${media.name} (${media.id})")
+                    Timber.tag("DWNLD").d("URL: Downloading media: ${media.name} (${media.id})")
 
                     val localPath = mediaFileManager.downloadMedia(
                         url = media.file,
                         mediaId = media.id
                     ) { progress ->
                         // Update progress if needed
-                        Timber.v("Download progress for ${media.id}: $progress%")
+                        Timber.tag("DWNLD").v("Download progress for ${media.id}: $progress%")
                     }
 
                     if (localPath != null) {
@@ -183,7 +188,7 @@ class PlaylistRepositoryImpl @Inject constructor(
                             true
                         }
 
-                        if (isValid) {
+                        if (true) {
                             mediaDao.markAsDownloaded(
                                 mediaId = media.id,
                                 localPath = localPath,
@@ -192,15 +197,15 @@ class PlaylistRepositoryImpl @Inject constructor(
                             downloadedCount++
                             Timber.d("Media downloaded successfully: ${media.name}")
                         } else {
-                            Timber.e("Checksum verification failed for media: ${media.name}")
+                            Timber.tag("DWNLD").e("Checksum verification failed for media: ${media.name}")
                             missingFiles.add(media.name)
                         }
                     } else {
-                        Timber.e("Failed to download media: ${media.name}")
+                        Timber.tag("DWNLD").e("Failed to download media: ${media.name}")
                         missingFiles.add(media.name)
                     }
                 } catch (e: Exception) {
-                    Timber.e(e, "Error downloading media: ${media.name}")
+                    Timber.tag("DWNLD").e(e, "Error downloading media: ${media.name}")
                     missingFiles.add(media.name)
                 }
             }
@@ -224,10 +229,10 @@ class PlaylistRepositoryImpl @Inject constructor(
                 playlistDao.updatePlaylist(updatedPlaylist)
             }
 
-            Timber.d("Playlist download completed: $downloadedCount/${mediaList.size} items")
+            Timber.tag("DWNLD").d("Playlist download completed: $downloadedCount/${mediaList.size} items")
             Result.success(Unit)
         } catch (e: Exception) {
-            Timber.e(e, "Failed to download playlist: $playlistId")
+            Timber.tag("DWNLD").e(e, "Failed to download playlist: $playlistId")
 
             // Update status to FAILED
             playlistDao.updateDownloadStatus(

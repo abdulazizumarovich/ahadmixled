@@ -8,6 +8,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.Lifecycle
@@ -43,6 +44,7 @@ class AuthActivity : AppCompatActivity() {
         observeViewModel()
     }
 
+    @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
     private fun setupFullScreenUI() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -137,7 +139,7 @@ class AuthActivity : AppCompatActivity() {
                 Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show()
             }
             is LoginState.Error -> {
-                Timber.e("Login state: Error - ${state.message}")
+                Timber.tag("TAGDF").e("Login state: Error - ${state.message}")
                 binding.progressBar.visibility = View.GONE
                 binding.btnLogin.isEnabled = true
                 binding.etUsername.isEnabled = true

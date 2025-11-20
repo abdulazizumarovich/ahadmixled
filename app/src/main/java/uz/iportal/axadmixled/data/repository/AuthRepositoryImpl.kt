@@ -18,20 +18,21 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun login(request: LoginRequest): Result<AuthTokens> {
         return try {
-            Timber.d("Attempting login for user: ${request.username}")
+            Timber.tag("TAGDF").d("Attempting login for user: ${request.username}")
             val response = authApi.login(request)
 
+
             val tokens = AuthTokens(
-                access = response.access,
-                refresh = response.refresh,
+                access = response.access ?: "",
+                refresh = response.refresh ?: "",
                 expiresAt = System.currentTimeMillis() + (24 * 60 * 60 * 1000) // 24 hours
             )
 
             saveTokens(tokens)
-            Timber.d("Login successful")
+            Timber.tag("TAGDF").d("Login successful")
             Result.success(tokens)
         } catch (e: Exception) {
-            Timber.e(e, "Login failed")
+            Timber.tag("TAGDF").e(e, "Login failed")
             Result.failure(e)
         }
     }
@@ -55,10 +56,10 @@ class AuthRepositoryImpl @Inject constructor(
             )
 
             saveTokens(tokens)
-            Timber.d("Token refresh successful")
+            Timber.tag("TAGDF").d("Token refresh successful")
             Result.success(tokens)
         } catch (e: Exception) {
-            Timber.e(e, "Token refresh failed")
+            Timber.tag("TAGDF").e(e, "Token refresh failed")
             Result.failure(e)
         }
     }
@@ -70,7 +71,7 @@ class AuthRepositoryImpl @Inject constructor(
             val oneHourFromNow = System.currentTimeMillis() + (60 * 60 * 1000)
 
             if (expiresAt <= oneHourFromNow) {
-                Timber.d("Token expired or expiring soon, refreshing...")
+                Timber.tag("TAGDF").d("Token expired or expiring soon, refreshing...")
                 refreshToken()
             } else {
                 val accessToken = getAccessToken()
@@ -88,7 +89,7 @@ class AuthRepositoryImpl @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            Timber.e(e, "Failed to check/refresh token")
+            Timber.tag("TAGDF").e(e, "Failed to check/refresh token")
             Result.failure(e)
         }
     }
@@ -109,11 +110,11 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun saveTokens(tokens: AuthTokens) {
         authPreferences.saveTokens(tokens)
-        Timber.d("Tokens saved successfully")
+        Timber.tag("TAGDF").d("Tokens saved successfully")
     }
 
     override suspend fun clearTokens() {
         authPreferences.clearTokens()
-        Timber.d("Tokens cleared")
+        Timber.tag("TAGDF").d("Tokens cleared")
     }
 }

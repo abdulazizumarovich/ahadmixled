@@ -37,6 +37,9 @@ class SplashActivity : AppCompatActivity() {
 
         // Initialize app
         initializeApp()
+
+//        throw RuntimeException("Test Crash") // Force a crash
+
     }
 
     private fun setupFullScreenUI() {

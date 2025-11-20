@@ -63,13 +63,49 @@ data class DeviceRegisterRequest(
     val volume: Int = 50
 )
 
+
 data class DeviceRegisterResponse(
-    val id: Int,
-    val snNumber: String,
-    val name: String,
-    val isActive: Boolean,
-    val createdAt: String
+
+    @field:SerializedName("code")
+    val code: Int? = null,
+
+    @field:SerializedName("data")
+    val data: DeviceRegisterResponseData? = null,
+
+    @field:SerializedName("status")
+    val status: String? = null
 )
+
+data class DeviceRegisterResponseData(
+
+    @field:SerializedName("volume")
+    val volume: Int,
+
+    @field:SerializedName("free_storage")
+    val freeStorage: String,
+
+    @field:SerializedName("brightness")
+    val brightness: Int,
+
+    @field:SerializedName("app_version")
+    val appVersion: String,
+
+    @field:SerializedName("mac_address")
+    val macAddress: String,
+
+    @field:SerializedName("total_storage")
+    val totalStorage: String,
+
+    @field:SerializedName("sn_number")
+    val snNumber: String,
+
+    @field:SerializedName("id")
+    val id: Int,
+
+    @field:SerializedName("ip_address")
+    val ipAddress: String
+)
+
 
 data class DeviceStorageUpdate(
     val type: String = "device_storage",

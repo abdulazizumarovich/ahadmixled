@@ -26,10 +26,8 @@ class DeviceInfoProvider @Inject constructor(
                 Settings.Secure.ANDROID_ID
             )
             if (androidId.isNullOrBlank() || androidId == "9774d56d682e549c") {
-                // Fallback to UUID if Android ID is not available or is the emulator ID
                 UUID.randomUUID().toString().replace("-", "").take(16)
             } else {
-                // Plain ANDROID_ID, matching Flutter's androidInfo.id
                 androidId
             }
         } catch (e: Exception) {

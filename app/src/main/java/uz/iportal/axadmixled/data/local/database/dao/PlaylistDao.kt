@@ -18,7 +18,7 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE is_active = 1 LIMIT 1")
     suspend fun getActivePlaylist(): PlaylistEntity?
 
-    @Query("SELECT id FROM playlists WHERE download_status = 'READY'")
+    @Query("SELECT id FROM playlists")
     suspend fun getReadyPlaylistIds(): List<Int>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

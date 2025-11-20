@@ -50,25 +50,30 @@ class SplashViewModel @Inject constructor(
             // Load playlists
             Timber.d("Loading playlists from database")
             val playlists = playlistRepository.getPlaylists()
-
+            // Start background download for remaining playlists
+            viewModelScope.launch {
+                Timber.d("Starting background downloads for remaining playlists")
+                playlistRepository.downloadRemainingPlaylistsInBackground()
+            }
             // Download current playlist if needed
             val currentPlaylist = playlists.firstOrNull { it.isActive } ?: playlists.firstOrNull()
+
             if (currentPlaylist == null) {
                 Timber.e("No playlists available")
                 emit(AppState.Error("No playlists available"))
                 return@flow
             }
 
-            if (currentPlaylist.downloadStatus != DownloadStatus.READY) {
-                Timber.d("Downloading current playlist: ${currentPlaylist.id}")
-                playlistRepository.downloadPlaylist(currentPlaylist.id)
-            }
+//            if (currentPlaylist.downloadStatus != DownloadStatus.READY) {
+//                Timber.d("Downloading current playlist: ${currentPlaylist.id}")
+//                playlistRepository.downloadPlaylist(currentPlaylist.id)
+//            }
 
             // Start background download for remaining playlists
-            viewModelScope.launch {
-                Timber.d("Starting background downloads for remaining playlists")
-                playlistRepository.downloadRemainingPlaylistsInBackground()
-            }
+//            viewModelScope.launch {
+//                Timber.d("Starting background downloads for remaining playlists")
+//                playlistRepository.downloadRemainingPlaylistsInBackground()
+//            }
 
             Timber.d("App initialization complete")
             emit(AppState.Ready)

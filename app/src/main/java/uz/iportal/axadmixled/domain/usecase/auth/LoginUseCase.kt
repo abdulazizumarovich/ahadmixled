@@ -17,6 +17,7 @@ class LoginUseCase @Inject constructor(
         }
 
         val request = LoginRequest(username, password)
+
         return authRepository.login(request)
     }
 }

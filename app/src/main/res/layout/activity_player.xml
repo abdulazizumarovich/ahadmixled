@@ -21,7 +21,8 @@
         android:layout_height="match_parent"
         android:contentDescription="@string/media_image"
         android:scaleType="centerCrop"
-        android:visibility="gone" />
+        android:visibility="gone"
+        tools:visibility="visible" />
 
     <!-- Text Overlay View -->
     <uz.iportal.axadmixled.presentation.player.components.TextOverlayView

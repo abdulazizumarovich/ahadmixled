@@ -94,17 +94,17 @@ class MediaPlayerManager @Inject constructor(
     private fun playCurrentMedia() {
         val playlist = currentPlaylist
         if (playlist == null) {
-            Timber.w("Cannot play media: no playlist loaded")
+            Timber.tag("PLAYERSCREEN").w("Cannot play media: no playlist loaded")
             return
         }
 
         if (playlist.media.isEmpty()) {
-            Timber.w("Cannot play media: playlist is empty")
+            Timber.tag("PLAYERSCREEN").w("Cannot play media: playlist is empty")
             return
         }
 
         val media = playlist.media[currentMediaIndex]
-        Timber.d("Playing media: ${media.name} (type=${media.mediaType}, index=$currentMediaIndex)")
+        Timber.tag("PLAYERSCREEN").d("Playing media: ${media.name} (type=${media.mediaType}, index=$currentMediaIndex)")
 
         when (media.mediaType) {
             MediaType.VIDEO -> playVideo(media)
@@ -126,14 +126,14 @@ class MediaPlayerManager @Inject constructor(
     private fun playVideo(media: Media) {
         val localPath = media.localPath
         if (localPath.isNullOrEmpty()) {
-            Timber.e("Video local path is null for media ${media.id}")
+            Timber.tag("PLAYERSCREEN").e("Video local path is null for media ${media.id}")
             playNext()
             return
         }
 
         val file = File(localPath)
         if (!file.exists()) {
-            Timber.e("Video file does not exist: $localPath")
+            Timber.tag("PLAYERSCREEN").e("Video file does not exist: $localPath")
             playNext()
             return
         }
@@ -152,9 +152,9 @@ class MediaPlayerManager @Inject constructor(
                 playWhenReady = true
             }
 
-            Timber.d("Started video playback: ${file.absolutePath}")
+            Timber.tag("PLAYERSCREEN").d("Started video playback: ${file.absolutePath}")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to play video: ${media.name}")
+            Timber.tag("PLAYERSCREEN").e(e, "Failed to play video: ${media.name}")
             playNext()
         }
     }
@@ -199,7 +199,7 @@ class MediaPlayerManager @Inject constructor(
 
         currentMediaIndex = (currentMediaIndex + 1) % playlist.media.size
         Timber.d("Playing next media (index=$currentMediaIndex)")
-        playCurrentMedia()
+//        playCurrentMedia()
     }
 
     fun playPrevious() {
@@ -249,6 +249,8 @@ class MediaPlayerManager @Inject constructor(
 
     fun playSpecificMedia(mediaId: Int?, mediaIndex: Int?) {
         val playlist = currentPlaylist ?: return
+
+        if (playlist.media.isEmpty()) return
 
         val index = when {
             mediaIndex != null -> {

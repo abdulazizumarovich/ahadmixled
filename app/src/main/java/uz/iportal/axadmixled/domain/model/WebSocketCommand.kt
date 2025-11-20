@@ -1,5 +1,7 @@
 package uz.iportal.axadmixled.domain.model
 
+import com.google.gson.annotations.SerializedName
+
 sealed class WebSocketCommand {
     object Play : WebSocketCommand()
     object Pause : WebSocketCommand()
@@ -17,9 +19,11 @@ sealed class WebSocketCommand {
 
 data class WebSocketCommandDto(
     val action: String,
+    @SerializedName("playlist_id")
     val playlistId: Int? = null,
     val mediaId: Int? = null,
     val mediaIndex: Int? = null,
+    @SerializedName("params")
     val textOverlay: TextOverlayDto? = null,
     val brightness: Int? = null,
     val volume: Int? = null,

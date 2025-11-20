@@ -3,6 +3,7 @@ package uz.iportal.axadmixled.presentation.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -14,10 +15,12 @@ import timber.log.Timber
 import uz.iportal.axadmixled.domain.model.LoginRequest
 import uz.iportal.axadmixled.domain.repository.AuthRepository
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
+import uz.iportal.axadmixled.domain.repository.PlaylistRepository
 import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
+    private val playlistRepository: PlaylistRepository,
     private val authRepository: AuthRepository,
     private val deviceRepository: DeviceRepository
 ) : ViewModel() {
@@ -45,30 +48,42 @@ class AuthViewModel @Inject constructor(
                 val request = LoginRequest(username = username, password = password)
                 val result = authRepository.login(request)
 
-                result.onSuccess { tokens ->
-                    Timber.d("Login successful, saving tokens")
-                    authRepository.saveTokens(tokens)
+                result
+                    .onSuccess { tokens ->
+                        Timber.d("Login successful, saving tokens")
+                        authRepository.saveTokens(tokens)
 
-                    // Register device after successful login
-                    Timber.d("Registering device...")
-                    val registerResult = deviceRepository.registerDevice()
+                        // Register device after successful login
+                        Timber.d("Registering device...")
+                        val registerResult = deviceRepository.registerDevice()
 
-                    registerResult.onSuccess { response ->
-                        Timber.d("Device registered successfully: ${response.name} (ID: ${response.id})")
-                        _loginState.value = LoginState.Success
-                        _navigationEvent.emit(NavigationEvent.NavigateToPlayer)
-                    }.onFailure { error ->
-                        Timber.e(error, "Device registration failed: ${error.message}")
+                        registerResult
+                            .onSuccess { response ->
+                                Timber.d("Device registered successfully: ${response.data}")
+                                viewModelScope.launch {
+                                    async {
+                                        playlistRepository.syncPlaylists()
+                                    }.await()
+                                    _loginState.value = LoginState.Success
+                                    _navigationEvent.emit(NavigationEvent.NavigateToPlayer)
+
+
+                                }
+
+                            }
+                            .onFailure { error ->
+                                Timber.e(error, "Device registration failed: ${error.message}")
+                                _loginState.value = LoginState.Error(
+                                    "Device registration failed: ${error.message ?: "Unknown error"}"
+                                )
+                            }
+                    }
+                    .onFailure { error ->
+                        Timber.e(error, "Login failed")
                         _loginState.value = LoginState.Error(
-                            "Device registration failed: ${error.message ?: "Unknown error"}"
+                            error.message ?: "Login failed. Please check your credentials."
                         )
                     }
-                }.onFailure { error ->
-                    Timber.e(error, "Login failed")
-                    _loginState.value = LoginState.Error(
-                        error.message ?: "Login failed. Please check your credentials."
-                    )
-                }
             } catch (e: Exception) {
                 Timber.e(e, "Unexpected error during login")
                 _loginState.value = LoginState.Error(

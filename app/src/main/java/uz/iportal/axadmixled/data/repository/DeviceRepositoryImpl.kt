@@ -64,17 +64,17 @@ class DeviceRepositoryImpl @Inject constructor(
 
             // Save device info locally
             val deviceEntity = DeviceEntity(
-                id = response.id,
-                snNumber = response.snNumber,
-                name = response.name,
+                id = response.data?.id?:0,
+                snNumber = response.data?.snNumber?:"0",
+                name = response.data?.snNumber?:"",
                 model = Build.MODEL,
                 androidVersion = "Android ${Build.VERSION.RELEASE}",
                 screenResolution = getScreenResolution(),
                 storageTotal = totalStorage,
                 storageFree = freeStorage,
                 storageUsed = totalStorage - freeStorage,
-                isActive = response.isActive,
-                createdAt = response.createdAt,
+                isActive = true,
+                createdAt = response.data?.snNumber?:"",
                 registeredAt = System.currentTimeMillis()
             )
             deviceDao.insertDevice(deviceEntity)
@@ -82,7 +82,7 @@ class DeviceRepositoryImpl @Inject constructor(
             // Save SN number in preferences
             authPreferences.saveDeviceSnNumber(snNumber)
 
-            Timber.d("Device registered successfully: ${response.name} (ID: ${response.id})")
+//            Timber.d("Device registered successfully: ${response.name} (ID: ${response.id})")
             Result.success(response)
         } catch (e: Exception) {
             Timber.e(e, "Device registration failed: ${e.message}")
@@ -164,9 +164,9 @@ class DeviceRepositoryImpl @Inject constructor(
 
         // Check if existing SN is valid (not the old "LED-" prefixed format or literal "LED-ANDROID_ID")
         val isValidSn = !existingSn.isNullOrEmpty() &&
-                        !existingSn.startsWith("LED-") &&
-                        existingSn != "LED-ANDROID_ID" &&
-                        existingSn != "ANDROID_ID"
+                !existingSn.startsWith("LED-") &&
+                existingSn != "LED-ANDROID_ID" &&
+                existingSn != "ANDROID_ID"
 
         if (isValidSn) {
             Timber.d("Using existing valid SN: $existingSn")

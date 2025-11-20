@@ -1,5 +1,7 @@
 package uz.iportal.axadmixled.domain.model
 
+import com.google.gson.annotations.SerializedName
+
 data class AuthTokens(
     val access: String,
     val refresh: String,
@@ -7,13 +9,25 @@ data class AuthTokens(
 )
 
 data class LoginRequest(
-    val username: String,
-    val password: String
+    val username: String = "",
+    val password: String = ""
 )
 
 data class LoginResponse(
-    val access: String,
-    val refresh: String
+    @field:SerializedName("access")
+    val access: String? = null,
+
+    @field:SerializedName("role")
+    val role: String? = null,
+
+    @field:SerializedName("refresh")
+    val refresh: String? = null,
+
+    @field:SerializedName("expire_in")
+    val expireIn: String? = null,
+
+    @field:SerializedName("refresh_expire")
+    val refreshExpire: String? = null
 )
 
 data class RefreshTokenRequest(
