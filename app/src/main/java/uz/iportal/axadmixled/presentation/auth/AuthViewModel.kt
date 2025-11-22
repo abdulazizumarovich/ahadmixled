@@ -1,5 +1,6 @@
 package uz.iportal.axadmixled.presentation.auth
 
+import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import uz.iportal.axadmixled.data.local.preferences.AuthPreferences
 import uz.iportal.axadmixled.domain.model.LoginRequest
 import uz.iportal.axadmixled.domain.repository.AuthRepository
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
@@ -22,7 +24,8 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val authRepository: AuthRepository,
-    private val deviceRepository: DeviceRepository
+    private val deviceRepository: DeviceRepository,
+    private val authPreferences: AuthPreferences
 ) : ViewModel() {
 
     private val _loginState = MutableStateFlow<LoginState>(LoginState.Idle)
@@ -31,11 +34,17 @@ class AuthViewModel @Inject constructor(
     private val _navigationEvent = MutableSharedFlow<NavigationEvent>()
     val navigationEvent: SharedFlow<NavigationEvent> = _navigationEvent.asSharedFlow()
 
-    fun login(username: String, password: String) {
+    fun login(ip: String, username: String, password: String) {
         viewModelScope.launch {
             try {
                 Timber.d("Attempting login for user: $username")
                 _loginState.value = LoginState.Loading
+
+                if (ip.isNotEmpty() && !Patterns.IP_ADDRESS.matcher(ip).matches()) {
+                    Timber.w("Login failed: invalid IP")
+                    _loginState.value = LoginState.Error("Invalid IP", ipError = true)
+                    return@launch
+                } else authPreferences.saveIp(ip.ifEmpty { null })
 
                 // Validate inputs
                 if (username.isBlank() || password.isBlank()) {
@@ -108,7 +117,7 @@ sealed class LoginState {
     object Idle : LoginState()
     object Loading : LoginState()
     object Success : LoginState()
-    data class Error(val message: String) : LoginState()
+    data class Error(val message: String, val ipError: Boolean = false) : LoginState()
 }
 
 sealed class NavigationEvent {

@@ -15,7 +15,13 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :playlistId")
     suspend fun getPlaylistById(playlistId: Int): PlaylistEntity?
 
-    @Query("SELECT * FROM playlists WHERE is_active = 1 LIMIT 1")
+    @Query("SELECT download_status FROM playlists WHERE id = :playlistId")
+    suspend fun getDownloadStatusById(playlistId: Int): String?
+
+    @Query("SELECT last_synced_at FROM playlists ORDER BY last_synced_at ASC limit 1")
+    suspend fun getOldestSyncTime(): Long?
+
+    @Query("SELECT * FROM playlists WHERE is_active = 1 ORDER BY priority DESC LIMIT 1")
     suspend fun getActivePlaylist(): PlaylistEntity?
 
     @Query("SELECT id FROM playlists")
@@ -30,8 +36,8 @@ interface PlaylistDao {
     @Update
     suspend fun updatePlaylist(playlist: PlaylistEntity)
 
-    @Query("UPDATE playlists SET download_status = :status, downloaded_items = :downloadedItems WHERE id = :playlistId")
-    suspend fun updateDownloadStatus(playlistId: Int, status: String, downloadedItems: Int)
+    @Query("UPDATE playlists SET download_status = :status WHERE id = :playlistId")
+    suspend fun updateDownloadStatus(playlistId: Int, status: String)
 
     @Query("DELETE FROM playlists WHERE id = :playlistId")
     suspend fun deletePlaylist(playlistId: Int)

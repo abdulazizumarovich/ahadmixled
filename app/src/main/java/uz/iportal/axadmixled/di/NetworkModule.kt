@@ -14,12 +14,15 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import timber.log.Timber
+import uz.iportal.axadmixled.core.constants.ApiConstants
+import uz.iportal.axadmixled.data.local.preferences.AuthPreferences
 import uz.iportal.axadmixled.data.remote.api.AuthApi
 import uz.iportal.axadmixled.data.remote.api.DeviceApi
 import uz.iportal.axadmixled.data.remote.api.PlaylistApi
 import uz.iportal.axadmixled.data.remote.api.ScreenshotApi
 import uz.iportal.axadmixled.util.Constants
 import java.util.concurrent.TimeUnit
+import javax.inject.Provider
 import javax.inject.Singleton
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
@@ -42,7 +45,7 @@ object NetworkModule {
     fun provideHttpLoggingInterceptor(): HttpLoggingInterceptor {
         return HttpLoggingInterceptor(
             logger = {
-                Timber.tag("TAGDF").d(it.toString())
+                Timber.tag("OKHTTP").d(it)
             }
         ).apply {
             level = HttpLoggingInterceptor.Level.BODY
@@ -83,38 +86,39 @@ object NetworkModule {
     }
 
     @Provides
-    @Singleton
+//    @Singleton
     fun provideRetrofit(
         okHttpClient: OkHttpClient,
+        authPreferences: AuthPreferences,
         gson: Gson
     ): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(Constants.BASE_URL)
+            .baseUrl(ApiConstants.baseUrl(authPreferences.getIp()))
             .addConverterFactory(GsonConverterFactory.create(gson))
             .client(okHttpClient)
             .build()
     }
 
     @Provides
-    @Singleton
-    fun provideAuthApi(retrofit: Retrofit): AuthApi {
-        return retrofit.create(AuthApi::class.java)
+//    @Singleton
+    fun provideAuthApi(retrofitProvider: Provider<Retrofit>): AuthApi {
+        return retrofitProvider.get().create(AuthApi::class.java)
     }
 
     @Provides
-    @Singleton
+//    @Singleton
     fun provideDeviceApi(retrofit: Retrofit): DeviceApi {
         return retrofit.create(DeviceApi::class.java)
     }
 
     @Provides
-    @Singleton
+//    @Singleton
     fun providePlaylistApi(retrofit: Retrofit): PlaylistApi {
         return retrofit.create(PlaylistApi::class.java)
     }
 
     @Provides
-    @Singleton
+//    @Singleton
     fun provideScreenshotApi(retrofit: Retrofit): ScreenshotApi {
         return retrofit.create(ScreenshotApi::class.java)
     }

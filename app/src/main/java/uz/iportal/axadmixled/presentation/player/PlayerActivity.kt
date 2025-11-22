@@ -13,35 +13,44 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import coil.load
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import uz.iportal.axadmixled.databinding.ActivityPlayerBinding
 import uz.iportal.axadmixled.domain.model.MediaType
-import uz.iportal.axadmixled.domain.model.Playlist
-import uz.iportal.axadmixled.presentation.player.components.MediaPlayerManager
 import uz.iportal.axadmixled.presentation.player.components.PlaybackState
+import uz.iportal.axadmixled.util.localPathToUri
 import javax.inject.Inject
 
+private const val TAG = "PlayerActivity"
+
+@UnstableApi
 @AndroidEntryPoint
 class PlayerActivity : AppCompatActivity() {
+
     private lateinit var binding: ActivityPlayerBinding
     private val viewModel: PlayerViewModel by viewModels()
     private var exoPlayer: ExoPlayer? = null
-    private var mediaList = emptyList<List<Playlist>>()
+//    private var mediaList = emptyList<List<Playlist>>()
 
     @Inject
-    lateinit var mediaPlayerManager: MediaPlayerManager
+    lateinit var defaultMediaSourceFactory: DefaultMediaSourceFactory
+
+    @Inject
+    lateinit var renderersFactory: RenderersFactory
 
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Timber.tag("PLAYERSCREEN").d("PlayerActivity onCreate")
+        Timber.tag(TAG).d("PlayerActivity onCreate")
 
         // Setup ViewBinding
         binding = ActivityPlayerBinding.inflate(layoutInflater)
@@ -83,9 +92,9 @@ class PlayerActivity : AppCompatActivity() {
                         )
             }
 
-            Timber.tag("PLAYERSCREEN").d("Full screen immersive UI configured")
+            Timber.tag(TAG).d("Full screen immersive UI configured")
         } catch (e: Exception) {
-            Timber.tag("PLAYERSCREEN").e(e, "Failed to setup full screen UI")
+            Timber.tag(TAG).e(e, "Failed to setup full screen UI")
         }
     }
 
@@ -100,37 +109,58 @@ class PlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.currentPlaylist.collect { playlist ->
-
-//                    Timber.tag("PLAYERSCREEN").d("Playlist COUNT: ${playlist?.id}")
-                    if (playlist != null) {
-//                        mediaList = playlist.filterNotNull()
-//                        Timber.tag("PLAYERSCREEN").d("Playlist loaded: ${playlist.name}")
+//                    Timber.tag(TAG).d("Playlist COUNT: ${playlist?.id}")
+                    if (playlist == null) {
+                        Timber.tag(TAG).w("No playlist available")
+                        return@collect
+                    }
+                //                        mediaList = playlist.filterNotNull()
+                //                        Timber.tag(TAG).d("Playlist loaded: ${playlist.name}")
                         // Initialize MediaPlayerManager with the playlist
-                        try {
-                            exoPlayer?.stop()
-                            exoPlayer = ExoPlayer.Builder(this@PlayerActivity).build().apply {
-                                binding.playerView.player = this
-                                val mediaItems: MutableList<MediaItem> = playlist.media.filter {
-                                    it.mediaType != MediaType.IMAGE
-                                }.map {
-                                    MediaItem.fromUri(it.file.toUri())
-                                }.toMutableList()
-                                binding.playerView.hideController() // Hide controller UI
-                                binding.playerView.useController = false
-                                repeatMode = Player.REPEAT_MODE_ALL
-                                setMediaItems(mediaItems)
-                                prepare()
-                                play()
+                    try {
+                        exoPlayer?.stop()
+                        exoPlayer?.release()
 
+                        exoPlayer = ExoPlayer.Builder(this@PlayerActivity)
+                            .setMediaSourceFactory(defaultMediaSourceFactory)
+                            .setRenderersFactory(renderersFactory)
+                            .build()
+//
+//                        exoPlayer!!.trackSelectionParameters = exoPlayer!!.trackSelectionParameters
+//                            .buildUpon()
+//                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+//                            .build()
+
+                        binding.playerView.player = exoPlayer
+                        binding.playerView.hideController() // Hide controller UI
+                        binding.playerView.useController = false
+
+                        val mediaItems = playlist.media
+                            .filter { it.mediaType != MediaType.IMAGE }
+                            .map {
+                                Timber.tag(TAG).d("Queuing Media: $it")
+                                var uri = it.localPath.localPathToUri()
+                                if (it.isDownloaded && uri != null) {
+                                    Timber.tag(TAG).d("From file: $uri")
+                                } else {
+                                    uri = it.file.toUri()
+                                    Timber.tag(TAG).d("From url: $uri")
+                                }
+
+                                MediaItem.fromUri(uri)
                             }
-                            Timber.tag("PLAYERSCREEN")
-                                .d("MediaPlayerManager initialized successfully")
-                        } catch (e: Exception) {
-                            Timber.tag("PLAYERSCREEN")
-                                .e(e, "Failed to initialize MediaPlayerManager")
+
+                        exoPlayer?.apply {
+                            setMediaItems(mediaItems)
+                            repeatMode = Player.REPEAT_MODE_ALL
+                            prepare()
+                            play()
                         }
-                    } else {
-                        Timber.tag("PLAYERSCREEN").w("No playlist available")
+
+                        Timber.tag(TAG).d("MediaPlayerManager initialized successfully")
+                    } catch (e: Exception) {
+                        Timber.tag(TAG)
+                            .e(e, "Failed to initialize MediaPlayerManager")
                     }
                 }
             }
@@ -276,16 +306,16 @@ class PlayerActivity : AppCompatActivity() {
                 }
 
                 is PlaybackState.Paused -> {
-                    Timber.tag("PLAYERSCREEN").d("Playback paused")
+                    Timber.tag(TAG).d("Playback paused")
                 }
 
                 is PlaybackState.Idle -> {
-                    Timber.tag("PLAYERSCREEN").d("Playback idle")
+                    Timber.tag(TAG).d("Playback idle")
                     hideImageView()
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("PLAYERSCREEN").e(e, "Error handling playback state")
+            Timber.tag(TAG).e(e, "Error handling playback state")
         }
     }
 
@@ -302,7 +332,7 @@ class PlayerActivity : AppCompatActivity() {
 //        }
 
         try {
-            Timber.tag("PLAYERSCREEN").d("Displaying image with Coil: $localPath")
+            Timber.tag(TAG).d("Displaying image with Coil: $localPath")
 
             // Hide video player, show image view
             binding.playerView.visibility = View.GONE
@@ -314,16 +344,16 @@ class PlayerActivity : AppCompatActivity() {
                 error(android.R.drawable.ic_menu_report_image)
                 listener(
                     onSuccess = { _, _ ->
-                        Timber.tag("PLAYERSCREEN").d("Image loaded successfully: $localPath")
+                        Timber.tag(TAG).d("Image loaded successfully: $localPath")
                     },
                     onError = { _, throwable ->
-                        Timber.tag("PLAYERSCREEN")
+                        Timber.tag(TAG)
                             .e(throwable.throwable, "Failed to load image: $localPath")
                     }
                 )
             }
         } catch (e: Exception) {
-            Timber.tag("PLAYERSCREEN").e(e, "Error displaying image with Coil")
+            Timber.tag(TAG).e(e, "Error displaying image with Coil")
         }
     }
 
@@ -334,7 +364,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        Timber.tag("PLAYERSCREEN").d("PlayerActivity onResume")
+        Timber.tag(TAG).d("PlayerActivity onResume")
 
         // Maintain full screen on resume
         setupFullScreenUI()
@@ -342,14 +372,16 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Timber.tag("PLAYERSCREEN").d("PlayerActivity onDestroy")
+        Timber.tag(TAG).d("PlayerActivity onDestroy")
 
         // Release media player resources
         try {
+            exoPlayer?.stop()
+            exoPlayer?.release()
 //            mediaPlayerManager.release()
-            Timber.tag("PLAYERSCREEN").d("MediaPlayerManager released")
+            Timber.tag(TAG).d("MediaPlayerManager released")
         } catch (e: Exception) {
-            Timber.tag("PLAYERSCREEN").e(e, "Error releasing MediaPlayerManager")
+            Timber.tag(TAG).e(e, "Error releasing MediaPlayerManager")
         }
     }
 

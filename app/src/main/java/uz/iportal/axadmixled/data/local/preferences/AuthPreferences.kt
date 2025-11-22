@@ -1,9 +1,11 @@
 package uz.iportal.axadmixled.data.local.preferences
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
+import uz.iportal.axadmixled.core.constants.ApiConstants
 import uz.iportal.axadmixled.domain.model.AuthTokens
 import uz.iportal.axadmixled.util.Constants
 import javax.inject.Inject
@@ -69,5 +71,15 @@ class AuthPreferences @Inject constructor(
 
     fun getDeviceSnNumber(): String? {
         return sharedPreferences.getString(Constants.KEY_DEVICE_SN, null)
+    }
+
+    fun saveIp(ip: String?) {
+        sharedPreferences.edit {
+            putString(Constants.KEY_IP, ip)
+        }
+    }
+
+    fun getIp(): String {
+        return sharedPreferences.getString(Constants.KEY_IP, null) ?: ApiConstants.DOMAIN_NAME
     }
 }

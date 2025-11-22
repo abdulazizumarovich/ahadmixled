@@ -23,7 +23,7 @@ data class WebSocketCommandDto(
     val playlistId: Int? = null,
     val mediaId: Int? = null,
     val mediaIndex: Int? = null,
-    @SerializedName("params")
+    @SerializedName("text_overlay")
     val textOverlay: TextOverlayDto? = null,
     val brightness: Int? = null,
     val volume: Int? = null,

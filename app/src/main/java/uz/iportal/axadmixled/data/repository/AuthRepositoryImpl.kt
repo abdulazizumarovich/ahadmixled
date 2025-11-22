@@ -8,18 +8,19 @@ import uz.iportal.axadmixled.domain.model.LoginRequest
 import uz.iportal.axadmixled.domain.model.RefreshTokenRequest
 import uz.iportal.axadmixled.domain.repository.AuthRepository
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
-    private val authApi: AuthApi,
+    private val authApiProvider: Provider<AuthApi>,
     private val authPreferences: AuthPreferences
 ) : AuthRepository {
 
     override suspend fun login(request: LoginRequest): Result<AuthTokens> {
         return try {
             Timber.tag("TAGDF").d("Attempting login for user: ${request.username}")
-            val response = authApi.login(request)
+            val response = authApiProvider.get().login(request)
 
 
             val tokens = AuthTokens(
@@ -47,8 +48,7 @@ class AuthRepositoryImpl @Inject constructor(
 
             Timber.d("Refreshing access token")
             val request = RefreshTokenRequest(refresh = refreshToken)
-            val response = authApi.refreshToken(request)
-
+            val response = authApiProvider.get().refreshToken(request)
             val tokens = AuthTokens(
                 access = response.access,
                 refresh = response.refresh,

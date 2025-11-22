@@ -1,14 +1,11 @@
 package uz.iportal.axadmixled.presentation.splash
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.launch
 import timber.log.Timber
 import uz.iportal.axadmixled.data.remote.websocket.WebSocketManager
-import uz.iportal.axadmixled.domain.model.DownloadStatus
 import uz.iportal.axadmixled.domain.repository.AuthRepository
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
 import uz.iportal.axadmixled.domain.repository.PlaylistRepository
@@ -47,18 +44,16 @@ class SplashViewModel @Inject constructor(
             Timber.d("Connecting to WebSocket")
             webSocketManager.connect()
 
-            // Load playlists
-            Timber.d("Loading playlists from database")
-            val playlists = playlistRepository.getPlaylists()
             // Start background download for remaining playlists
-            viewModelScope.launch {
-                Timber.d("Starting background downloads for remaining playlists")
-                playlistRepository.downloadRemainingPlaylistsInBackground()
-            }
-            // Download current playlist if needed
-            val currentPlaylist = playlists.firstOrNull { it.isActive } ?: playlists.firstOrNull()
+//            viewModelScope.launch { this one gets cancelled because splash is temporary page
+//                Timber.d("Starting background downloads for remaining playlists")
+//                playlistRepository.downloadRemainingPlaylistsInBackground()
+//            }
+            // Load active playlist
+            Timber.d("Loading active playlist")
+            val playlist = playlistRepository.getActivePlaylist()
 
-            if (currentPlaylist == null) {
+            if (playlist == null) {
                 Timber.e("No playlists available")
                 emit(AppState.Error("No playlists available"))
                 return@flow

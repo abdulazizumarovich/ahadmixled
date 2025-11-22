@@ -1,5 +1,7 @@
 package uz.iportal.axadmixled.core.constants
 
+import uz.iportal.axadmixled.BuildConfig
+
 /**
  * API Constants
  * All backend endpoints and configuration (matching Flutter implementation)
@@ -7,13 +9,19 @@ package uz.iportal.axadmixled.core.constants
 object ApiConstants {
 
     // Base URL Configuration
-    private const val DOMAIN_NAME = "admin-led.ohayo.uz"
-    const val DOMAIN = "https://$DOMAIN_NAME"
-    const val BASE_URL = "$DOMAIN/api/v1"
+    const val DOMAIN_NAME = BuildConfig.DOMAIN
+    private const val PROTOCOL = BuildConfig.PROTOCOL
+    private const val PORT = BuildConfig.PORT
+
+//    const val BASE_URL = "$PROTOCOL://$DOMAIN_NAME:$PORT/"
+
+    fun baseUrl(domain: String): String {
+        return "$PROTOCOL://$domain$PORT/"
+    }
 
     // WebSocket Configuration
-    fun wsUrl(deviceId: String, token: String): String {
-        return "ws://admin-led.ohayo.uz/ws/cloud/tb_device/?token=$token&sn_number=$deviceId"
+    fun wsUrl(domain: String, deviceId: String, token: String): String {
+        return "ws://$domain$PORT/ws/cloud/tb_device/?token=$token&sn_number=$deviceId"
     }
 
     // Auth Endpoints

@@ -13,11 +13,12 @@ import uz.iportal.axadmixled.domain.model.DeviceRegisterResponse
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
 import uz.iportal.axadmixled.util.DeviceInfoProvider
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Singleton
 class DeviceRepositoryImpl @Inject constructor(
-    private val deviceApi: DeviceApi,
+    private val deviceApiProvider: Provider<DeviceApi>,
     private val deviceDao: DeviceDao,
     private val playlistDao: PlaylistDao,
     private val authPreferences: AuthPreferences,
@@ -57,7 +58,7 @@ class DeviceRepositoryImpl @Inject constructor(
 
             Timber.d("Sending device registration request: $request")
 
-            val response = deviceApi.registerDevice(
+            val response = deviceApiProvider.get().registerDevice(
                 token = "Bearer $accessToken",
                 request = request
             )
@@ -101,7 +102,7 @@ class DeviceRepositoryImpl @Inject constructor(
             }
 
             Timber.d("Fetching device info for SN: $snNumber")
-            val device = deviceApi.getDeviceInfo(
+            val device = deviceApiProvider.get().getDeviceInfo(
                 token = "Bearer $accessToken",
                 snNumber = snNumber
             )

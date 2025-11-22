@@ -1,3 +1,6 @@
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,6 +11,14 @@ plugins {
     alias(libs.plugins.google.firebase.crashlytics)
 }
 
+// Load local.properties - Kotlin way
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "uz.iportal.axadmixled"
     compileSdk = 35
@@ -16,23 +27,21 @@ android {
         applicationId = "uz.iportal.axadmixled"
         minSdk = 21
         targetSdk = 35
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        getByName("debug") {
-            val debugKeystorePath = System.getProperty("user.home") + "/.android/debug.keystore"
-            val debugKeystore = file(debugKeystorePath)
-            if (debugKeystore.exists()) {
-                storeFile = debugKeystore
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
-            }
+        create("release") {
+            storeFile = file(localProps.getProperty("KEYSTORE_FILE"))
+            storePassword = localProps.getProperty("KEYSTORE_PASSWORD")
+            keyAlias = localProps.getProperty("KEY_ALIAS")
+            keyPassword = localProps.getProperty("KEY_PASSWORD")
         }
+
+        getByName("debug") {}
     }
 
     buildTypes {
@@ -40,6 +49,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -47,17 +57,51 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = "17"
     }
+
     buildFeatures {
         compose = true
         viewBinding = true
         buildConfig = true
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("staging") {
+            dimension = "environment"
+            versionNameSuffix = "-staging"
+            buildConfigField("String", "PORT", "\":8000\"")
+            buildConfigField("String", "PROTOCOL", "\"http\"")
+            buildConfigField("String", "DOMAIN", "\"192.168.100.173\"")
+        }
+
+        create("production") {
+            dimension = "environment"
+            buildConfigField("String", "PORT", "\"\"")
+            buildConfigField("String", "PROTOCOL", "\"https\"")
+            buildConfigField("String", "DOMAIN", "\"admin-led.ohayo.uz\"")
+        }
+    }
+
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            val versionCode = defaultConfig.versionCode
+            val versionName = defaultConfig.versionName
+            val versionNameSuffix = variant.productFlavors.firstOrNull()?.versionNameSuffix.orEmpty()
+            val debugInfo = if (buildType.name == "debug") "_debug" else ""
+
+            (this as BaseVariantOutputImpl).outputFileName =
+                "${rootProject.name}${debugInfo}_v${versionName}${versionNameSuffix}-${versionCode}.apk"
+        }
     }
 }
 
@@ -104,6 +148,7 @@ dependencies {
     // Media Player (Media3/ExoPlayer)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.common)
+    implementation(libs.media3.okhttp)
     implementation(libs.media3.ui)
 
     // Image Loading
@@ -130,6 +175,8 @@ dependencies {
     debugImplementation(libs.chucker)
     releaseImplementation(libs.chucker.no.op)
 
+    // leak canary
+//    debugImplementation(libs.leakcanary)
 
     // Testing
     testImplementation(libs.junit)

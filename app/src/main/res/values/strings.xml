@@ -8,6 +8,7 @@
     <!-- Auth Screen -->
     <string name="username">Username</string>
     <string name="password">Password</string>
+    <string name="ip">IP</string>
     <string name="login">Login</string>
     <string name="sign_in">Sign In</string>
     <string name="sign_in_subtitle">Sign in to continue</string>

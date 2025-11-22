@@ -2,6 +2,7 @@ package uz.iportal.axadmixled.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,8 +27,8 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "led_player_database"
-        )
-            .fallbackToDestructiveMigration()
+        ).fallbackToDestructiveMigration()
+            .setJournalMode(RoomDatabase.JournalMode.TRUNCATE) // instant changes
             .build()
     }
 

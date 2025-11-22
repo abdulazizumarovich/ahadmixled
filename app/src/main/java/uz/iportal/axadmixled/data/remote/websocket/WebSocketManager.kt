@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -39,76 +40,56 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
+private const val TAG = "WebSocketManager"
+
 @Singleton
 class WebSocketManager @Inject constructor(
     private val authPreferences: AuthPreferences,
     private val deviceRepository: DeviceRepository,
     private val storageMonitor: StorageMonitor,
+    private val okHttpClient: OkHttpClient,
     private val gson: Gson,
 //    private val okHttpClient: OkHttpClient
 ) {
     private var webSocket: WebSocket? = null
     private var isConnected = false
     private var isReconnecting = false  // Track if reconnect is already scheduled
-    private val _commands = MutableSharedFlow<WebSocketCommand>()
+    private val _commands = MutableSharedFlow<WebSocketCommand>(
+        replay = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     private var storageMonitorJob: Job? = null
     private var reconnectJob: Job? = null
-//    private val client = OkHttpClient.Builder()
-//        .connectTimeout(10, TimeUnit.SECONDS)
-//        .readTimeout(30, TimeUnit.SECONDS)
-//        .writeTimeout(30, TimeUnit.SECONDS)
-//        .build()
     val commands: SharedFlow<WebSocketCommand> = _commands.asSharedFlow()
-
-    fun getUnsafeOkHttp(): OkHttpClient {
-        val trustAllCerts = arrayOf<TrustManager>(
-            object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            }
-        )
-
-        val sslContext = SSLContext.getInstance("SSL")
-        sslContext.init(null, trustAllCerts, SecureRandom())
-
-        val sslSocketFactory = sslContext.socketFactory
-
-        return OkHttpClient.Builder()
-            .sslSocketFactory(sslSocketFactory, trustAllCerts[0] as X509TrustManager)
-            .hostnameVerifier { _, _ -> true }
-            .build()
-    }
-
 
     fun connect() {
         // Prevent multiple simultaneous connection attempts
-        if (isConnected || isReconnecting) {
-            Timber.tag("WSLOG").d("Already connected or reconnecting, skipping connect()")
+        if (isConnected /* || isReconnecting*/) { // observed that checking for isReconnecting stops reconnection
+            Timber.tag(TAG).d("Already connected or reconnecting, skipping connect()")
             return
         }
 
         val token = authPreferences.getAccessToken() ?: run {
-            Timber.tag("WSLOG").e("No access token available")
+            Timber.tag(TAG).e("No access token available")
             return
         }
         val snNumber = authPreferences.getDeviceSnNumber() ?: run {
-            Timber.tag("WSLOG").e("No device SN number available")
+            Timber.tag(TAG).e("No device SN number available")
             return
         }
 
-        val url = ApiConstants.wsUrl(snNumber, token)
-        Timber.tag("WSLOG").d("Connecting to WebSocket: $url")
+        val url = ApiConstants.wsUrl(authPreferences.getIp(), snNumber, token)
+        Timber.tag(TAG).d("Connecting to WebSocket: $url")
         val request = Request.Builder().url(url).build()
 
 //        webSocket?.close(1000, "Reconnecting")
 
-        webSocket = getUnsafeOkHttp().newWebSocket(request, object : WebSocketListener() {
+        webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnected = true
                 isReconnecting = false  // Reset reconnecting flag
                 reconnectJob?.cancel()  // Cancel any pending reconnect attempts
-                Timber.tag("WSLOG").d("WebSocket connected successfully")
+                Timber.tag(TAG).d("WebSocket connected successfully")
 
                 CoroutineScope(Dispatchers.IO).launch {
                     sendReadyPlaylists()
@@ -118,26 +99,26 @@ class WebSocketManager @Inject constructor(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 if (text.contains("connection_established")) {
-                    Timber.tag("WSLOG").d("Connection established message ignored")
+                    Timber.tag(TAG).d("Connection established message ignored")
                     return
                 }
 
-                Timber.tag("WSLOG").d("Message received: $text")
+                Timber.tag(TAG).d("Message received: $text")
                 handleIncomingMessage(text)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Timber.tag("WSLOG").e(t, "WebSocket failure: ${t.message}")
+                Timber.tag(TAG).e(t, "WebSocket failure: ${t.message}")
                 handleDisconnect(reason = "Failure: ${t.message}")
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Timber.tag("WSLOG").d("WebSocket closing: $code - $reason")
+                Timber.tag(TAG).d("WebSocket closing: $code - $reason")
                 handleDisconnect(reason = "Closing: $reason")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Timber.tag("WSLOG").d("WebSocket closed: $code - $reason")
+                Timber.tag(TAG).d("WebSocket closed: $code - $reason")
                 handleDisconnect(reason = "Closed: $reason")
             }
         })
@@ -146,13 +127,13 @@ class WebSocketManager @Inject constructor(
     private fun handleDisconnect(reason: String) {
         // Prevent multiple reconnect attempts from running simultaneously
         if (isReconnecting) {
-            Timber.tag("WSLOG").d("Reconnect already scheduled, ignoring duplicate disconnect: $reason")
+            Timber.tag(TAG).d("Reconnect already scheduled, ignoring duplicate disconnect: $reason")
             return
         }
 
         isConnected = false
         isReconnecting = true
-        Timber.tag("WSLOG").w("WebSocket disconnected: $reason. Starting reconnect...")
+        Timber.tag(TAG).w("WebSocket disconnected: $reason. Starting reconnect...")
 
         scheduleReconnect()
     }
@@ -160,6 +141,7 @@ class WebSocketManager @Inject constructor(
     private fun handleIncomingMessage(message: String) {
         try {
             val commandDto = gson.fromJson(message, WebSocketCommandDto::class.java)
+            Timber.tag(TAG).d("Serialized as: $commandDto")
             val command = when (commandDto.action) {
                 "play" -> WebSocketCommand.Play
                 "pause" -> WebSocketCommand.Pause
@@ -198,16 +180,19 @@ class WebSocketManager @Inject constructor(
                     commandDto.playlistIdsToKeep ?: emptyList()
                 )
                 else -> {
-                    Timber.tag("WSLOG").w("Unknown command: ${commandDto.action}")
+                    Timber.tag(TAG).w("Unknown command: ${commandDto.action}")
                     return
                 }
             }
 
-            CoroutineScope(Dispatchers.Main).launch {
-                _commands.emit(command)
-            }
+//            CoroutineScope(Dispatchers.Main).launch {
+            Timber.tag(TAG).d("Emitting command $command")
+            val send = _commands.tryEmit(command)
+            if (!send)
+                Timber.tag(TAG).e("Failed to emit command $command")
+//            }
         } catch (e: Exception) {
-            Timber.tag("WSLOG").e(e, "Failed to parse WebSocket message")
+            Timber.tag(TAG).e(e, "Failed to parse WebSocket message")
         }
     }
 
@@ -222,7 +207,7 @@ class WebSocketManager @Inject constructor(
 
             val json = gson.toJson(message)
             webSocket?.send(json)
-            Timber.tag("WSLOG").d("Sent ready playlists: $json")
+            Timber.tag(TAG).d("Sent ready playlists: $json")
         }
     }
 
@@ -250,7 +235,7 @@ class WebSocketManager @Inject constructor(
 
             val json = gson.toJson(message)
             webSocket?.send(json)
-            Timber.tag("WSLOG").d("Sent storage update: $json")
+            Timber.tag(TAG).d("Sent storage update: $json")
         }
     }
 
@@ -285,14 +270,14 @@ class WebSocketManager @Inject constructor(
 
             while (!isConnected && attempt < Constants.WS_MAX_RETRY_ATTEMPTS) {
                 delay(retryDelay)
-                Timber.tag("WSLOG").d("Reconnecting WebSocket, attempt ${attempt + 1}/${Constants.WS_MAX_RETRY_ATTEMPTS}")
+                Timber.tag(TAG).d("Reconnecting WebSocket, attempt ${attempt + 1}/${Constants.WS_MAX_RETRY_ATTEMPTS}")
                 connect()
                 attempt++
                 retryDelay = (retryDelay * 2).coerceAtMost(Constants.WS_MAX_RETRY_DELAY)
             }
 
             if (!isConnected) {
-                Timber.tag("WSLOG")
+                Timber.tag(TAG)
                     .e("Failed to reconnect WebSocket after ${Constants.WS_MAX_RETRY_ATTEMPTS} attempts")
             }
             isReconnecting = false  // Reset flag after reconnect loop finishes

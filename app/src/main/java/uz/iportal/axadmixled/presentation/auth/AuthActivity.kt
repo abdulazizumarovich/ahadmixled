@@ -8,7 +8,6 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.activity.viewModels
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doOnTextChanged
 import androidx.lifecycle.Lifecycle
@@ -17,6 +16,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import uz.iportal.axadmixled.BuildConfig
 import uz.iportal.axadmixled.databinding.ActivityAuthBinding
 import uz.iportal.axadmixled.presentation.player.PlayerActivity
 
@@ -34,6 +34,11 @@ class AuthActivity : AppCompatActivity() {
         binding = ActivityAuthBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        @Suppress("KotlinConstantConditions")
+        if (BuildConfig.FLAVOR == "production") {
+            binding.tilIp.visibility = View.GONE
+        }
+
         // Setup full screen UI
         setupFullScreenUI()
 
@@ -44,7 +49,6 @@ class AuthActivity : AppCompatActivity() {
         observeViewModel()
     }
 
-    @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
     private fun setupFullScreenUI() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -78,9 +82,10 @@ class AuthActivity : AppCompatActivity() {
         binding.btnLogin.setOnClickListener {
             val username = binding.etUsername.text?.toString() ?: ""
             val password = binding.etPassword.text?.toString() ?: ""
+            val ip = binding.etIp.text?.toString() ?: ""
 
             Timber.d("Login button clicked")
-            viewModel.login(username, password)
+            viewModel.login(ip, username, password)
         }
 
         // Clear error on text change
@@ -147,7 +152,13 @@ class AuthActivity : AppCompatActivity() {
 
                 // Show error message
                 Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
-                binding.tilPassword.error = state.message
+                if (state.ipError) {
+                    binding.tilIp.error = state.message
+                    binding.tilPassword.error = null
+                } else {
+                    binding.tilPassword.error = state.message
+                    binding.tilIp.error = null
+                }
             }
         }
     }

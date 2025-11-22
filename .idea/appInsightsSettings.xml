@@ -4,19 +4,33 @@
     <option name="selectedTabId" value="Firebase Crashlytics" />
     <option name="tabSettings">
       <map>
+        <entry key="Android Vitals">
+          <value>
+            <InsightsFilterSettings>
+              <option name="connection">
+                <ConnectionSetting>
+                  <option name="appId" value="com.masary.android" />
+                </ConnectionSetting>
+              </option>
+              <option name="signal" value="SIGNAL_UNSPECIFIED" />
+              <option name="timeIntervalDays" value="SEVEN_DAYS" />
+              <option name="visibilityType" value="ALL" />
+            </InsightsFilterSettings>
+          </value>
+        </entry>
         <entry key="Firebase Crashlytics">
           <value>
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="uz.iportal.axadmixled" />
-                  <option name="mobileSdkAppId" value="1:603857659446:android:66a1ba1132c012a4721a97" />
-                  <option name="projectId" value="ahad-mix-led" />
-                  <option name="projectNumber" value="603857659446" />
+                  <option name="mobileSdkAppId" value="1:418264079672:android:6dfeaf8ecd505ffe95b5cd" />
+                  <option name="projectId" value="mixled" />
+                  <option name="projectNumber" value="418264079672" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
-              <option name="timeIntervalDays" value="ONE_DAY" />
+              <option name="timeIntervalDays" value="THIRTY_DAYS" />
               <option name="visibilityType" value="ALL" />
             </InsightsFilterSettings>
           </value>

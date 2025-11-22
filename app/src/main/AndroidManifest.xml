@@ -27,6 +27,11 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="remove" />
+
         <!-- Splash Activity - Launcher -->
         <activity
             android:name=".presentation.splash.SplashActivity"

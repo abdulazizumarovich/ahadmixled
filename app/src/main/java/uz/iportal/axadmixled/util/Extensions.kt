@@ -3,9 +3,11 @@ package uz.iportal.axadmixled.util
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.annotation.StringRes
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -129,4 +131,11 @@ fun <T> Result<T>.onFailureLog(tag: String = "Result", action: (Throwable) -> Un
         action(it)
     }
     return this
+}
+
+fun String?.localPathToUri(): Uri? {
+    if (this.isNullOrEmpty()) return null
+    val file = File(this)
+    if (!file.exists()) return null
+    return Uri.fromFile(file)
 }

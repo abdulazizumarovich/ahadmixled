@@ -21,6 +21,8 @@ import uz.iportal.axadmixled.domain.repository.PlaylistRepository
 import uz.iportal.axadmixled.util.NetworkMonitor
 import javax.inject.Inject
 
+private const val TAG = "PlayerViewModel"
+
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
@@ -43,7 +45,7 @@ class PlayerViewModel @Inject constructor(
     private fun observeWebSocketCommands() {
         viewModelScope.launch {
             webSocketManager.commands.collect { command ->
-                Timber.tag("PLAYLIST").d("Received WebSocket command: $command")
+                Timber.tag(TAG).d("Received WebSocket command: $command")
                 handleWebSocketCommand(command)
             }
         }
@@ -52,9 +54,9 @@ class PlayerViewModel @Inject constructor(
     private fun observeNetworkChanges() {
         viewModelScope.launch {
             networkMonitor.isConnected.collect { isConnected ->
-                Timber.tag("PLAYLIST").d("Network status changed: connected=$isConnected")
+                Timber.tag(TAG).d("Network status changed: connected=$isConnected")
                 if (isConnected) {
-                    Timber.tag("PLAYLIST").d("Network connected, reconnecting WebSocket and syncing playlists")
+                    Timber.tag(TAG).d("Network connected, reconnecting WebSocket and syncing playlists")
                     webSocketManager.connect()
                     syncPlaylists()
                 }
@@ -65,19 +67,15 @@ class PlayerViewModel @Inject constructor(
     fun loadCurrentPlaylist() {
         viewModelScope.launch {
             try {
-                Timber.tag("PLAYLIST").d("Loading current playlist")
-                val playlists = playlistRepository.getPlaylists()
-                val current = playlists.firstOrNull { it.isActive } ?: playlists.firstOrNull()
-                Timber.tag("PLAYLIST").d("CURRENT: ${current?.name}")
-
-                if (current != null) {
-                    Timber.tag("PLAYLIST").d("Loaded playlist: ${current.name} (id=${current.id})")
-                    _currentPlaylist.value = playlists.firstOrNull()
+                Timber.tag(TAG).d("Loading current playlist")
+                val playlist = playlistRepository.getActivePlaylist()
+                if (playlist != null) {
+                    _currentPlaylist.value = playlist
                 } else {
-                    Timber.tag("PLAYLIST").w("No playlists available")
+                    Timber.tag(TAG).w("No playlists available")
                 }
             } catch (e: Exception) {
-                Timber.tag("PLAYLIST").e(e, "Failed to load current playlist")
+                Timber.tag(TAG).e(e, "Failed to load current playlist")
             }
         }
     }
@@ -86,116 +84,115 @@ class PlayerViewModel @Inject constructor(
         try {
             when (command) {
                 is WebSocketCommand.Play -> {
-                    Timber.tag("PLAYLIST").d("Handling Play command")
+                    Timber.tag(TAG).d("Handling Play command")
                     _playerCommand.emit(PlayerCommand.Play)
                 }
                 is WebSocketCommand.Pause -> {
-                    Timber.tag("PLAYLIST").d("Handling Pause command")
+                    Timber.tag(TAG).d("Handling Pause command")
                     _playerCommand.emit(PlayerCommand.Pause)
                 }
                 is WebSocketCommand.Next -> {
-                    Timber.tag("PLAYLIST").d("Handling Next command")
+                    Timber.tag(TAG).d("Handling Next command")
                     _playerCommand.emit(PlayerCommand.Next)
                 }
                 is WebSocketCommand.Previous -> {
-                    Timber.tag("PLAYLIST").d("Handling Previous command")
+                    Timber.tag(TAG).d("Handling Previous command")
                     _playerCommand.emit(PlayerCommand.Previous)
                 }
                 is WebSocketCommand.ReloadPlaylist -> {
-                    Timber.tag("PLAYLIST").d("Handling ReloadPlaylist command")
+                    Timber.tag(TAG).d("Handling ReloadPlaylist command")
                     reloadPlaylist()
                 }
                 is WebSocketCommand.SwitchPlaylist -> {
-                    Timber.tag("PLAYLIST").d("Handling SwitchPlaylist command: playlistId=${command.playlistId}")
+                    Timber.tag(TAG).d("Handling SwitchPlaylist command: playlistId=${command.playlistId}")
                     switchPlaylist(command.playlistId)
                 }
                 is WebSocketCommand.PlayMedia -> {
-                    Timber.tag("PLAYLIST").d("Handling PlayMedia command: mediaId=${command.mediaId}, mediaIndex=${command.mediaIndex}")
+                    Timber.tag(TAG).d("Handling PlayMedia command: mediaId=${command.mediaId}, mediaIndex=${command.mediaIndex}")
                     _playerCommand.emit(
                         PlayerCommand.PlaySpecificMedia(command.mediaId, command.mediaIndex)
                     )
                 }
                 is WebSocketCommand.ShowTextOverlay -> {
-                    Timber.tag("PLAYLIST").d("Handling ShowTextOverlay command: text=${command.textOverlay.text}")
+                    Timber.tag(TAG).d("Handling ShowTextOverlay command: text=${command.textOverlay.text}")
                     _playerCommand.emit(PlayerCommand.ShowTextOverlay(command.textOverlay))
                 }
                 is WebSocketCommand.HideTextOverlay -> {
-                    Timber.tag("PLAYLIST").d("Handling HideTextOverlay command")
+                    Timber.tag(TAG).d("Handling HideTextOverlay command")
                     _playerCommand.emit(PlayerCommand.HideTextOverlay)
                 }
                 is WebSocketCommand.SetBrightness -> {
-                    Timber.tag("PLAYLIST").d("Handling SetBrightness command: brightness=${command.brightness}")
+                    Timber.tag(TAG).d("Handling SetBrightness command: brightness=${command.brightness}")
                     _playerCommand.emit(PlayerCommand.SetBrightness(command.brightness))
                 }
                 is WebSocketCommand.SetVolume -> {
-                    Timber.tag("PLAYLIST").d("Handling SetVolume command: volume=${command.volume}")
+                    Timber.tag(TAG).d("Handling SetVolume command: volume=${command.volume}")
                     _playerCommand.emit(PlayerCommand.SetVolume(command.volume))
                 }
                 is WebSocketCommand.CleanupOldPlaylists -> {
-                    Timber.tag("PLAYLIST").d("Handling CleanupOldPlaylists command: keep=${command.playlistIdsToKeep}")
+                    Timber.tag(TAG).d("Handling CleanupOldPlaylists command: keep=${command.playlistIdsToKeep}")
                     cleanupOldPlaylists(command.playlistIdsToKeep)
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("PLAYLIST").e(e, "Error handling WebSocket command: $command")
+            Timber.tag(TAG).e(e, "Error handling WebSocket command: $command")
         }
     }
 
     private suspend fun reloadPlaylist() {
         val currentPlaylist = _currentPlaylist.value
         if (currentPlaylist == null) {
-            Timber.tag("PLAYLIST").w("Cannot reload playlist: no current playlist")
+            Timber.tag(TAG).w("Cannot reload playlist: no current playlist")
             return
         }
 
         try {
-//            Timber.tag("PLAYLIST").d("Reloading playlist: ${currentPlaylist()}")
+//            Timber.tag(TAG).d("Reloading playlist: ${currentPlaylist()}")
 //            playlistRepository.downloadPlaylist(currentPlaylist.id)
             loadCurrentPlaylist()
             _playerCommand.emit(PlayerCommand.ReloadCurrentPlaylist)
         } catch (e: Exception) {
-            Timber.tag("PLAYLIST").e(e, "Failed to reload playlist")
+            Timber.tag(TAG).e(e, "Failed to reload playlist")
         }
     }
 
     private suspend fun switchPlaylist(playlistId: Int) {
         try {
-            Timber.tag("PLAYLIST").d("Switching to playlist: $playlistId")
+            Timber.tag(TAG).d("Switching to playlist: $playlistId")
             val playlist = playlistRepository.getPlaylist(playlistId)
-
-            if (playlist.downloadStatus != DownloadStatus.READY) {
-                Timber.tag("PLAYLIST").d("Playlist not ready, downloading: $playlistId")
-                playlistRepository.downloadPlaylist(playlistId)
+            if (playlist == null) {
+                Timber.tag(TAG).e("No playlist found for: $playlistId")
+                return
             }
 
             _currentPlaylist.value = playlist
 //            _playerCommand.emit(PlayerCommand.SwitchPlaylist(playlist))
         } catch (e: Exception) {
-            Timber.tag("PLAYLIST").e(e, "Failed to switch playlist: $playlistId")
+            Timber.tag(TAG).e(e, "Failed to switch playlist: $playlistId")
         }
     }
 
     private suspend fun cleanupOldPlaylists(playlistIdsToKeep: List<Int>) {
         try {
-            Timber.tag("PLAYLIST").d("Cleaning up old playlists, keeping: $playlistIdsToKeep")
+            Timber.tag(TAG).d("Cleaning up old playlists, keeping: $playlistIdsToKeep")
             playlistRepository.cleanupOldPlaylists(playlistIdsToKeep)
         } catch (e: Exception) {
-            Timber.tag("PLAYLIST").e(e, "Failed to cleanup old playlists")
+            Timber.tag(TAG).e(e, "Failed to cleanup old playlists")
         }
     }
 
     private suspend fun syncPlaylists() {
         try {
-            Timber.tag("PLAYLIST").d("Syncing playlists from server")
+            Timber.tag(TAG).d("Syncing playlists from server")
             playlistRepository.syncPlaylists()
         } catch (e: Exception) {
-            Timber.tag("PLAYLIST").e(e, "Failed to sync playlists")
+            Timber.tag(TAG).e(e, "Failed to sync playlists")
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        Timber.tag("PLAYLIST").d("PlayerViewModel cleared")
+        Timber.tag(TAG).d("PlayerViewModel cleared")
     }
 }
 

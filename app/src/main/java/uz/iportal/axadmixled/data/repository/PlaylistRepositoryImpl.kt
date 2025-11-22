@@ -2,11 +2,12 @@ package uz.iportal.axadmixled.data.repository
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import uz.iportal.axadmixled.data.local.database.dao.MediaDao
@@ -21,39 +22,55 @@ import uz.iportal.axadmixled.domain.model.Media
 import uz.iportal.axadmixled.domain.model.MediaType
 import uz.iportal.axadmixled.domain.model.Playlist
 import uz.iportal.axadmixled.domain.repository.PlaylistRepository
+import uz.iportal.axadmixled.util.Constants
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
+
+private const val TAG = "PlaylistRepository"
 
 @Singleton
 class PlaylistRepositoryImpl @Inject constructor(
-    private val playlistApi: PlaylistApi,
+    private val playlistApiProvider: Provider<PlaylistApi>,
     private val playlistDao: PlaylistDao,
     private val mediaDao: MediaDao,
     private val authPreferences: AuthPreferences,
     private val mediaFileManager: MediaFileManager
 ) : PlaylistRepository {
-
     private val gson = Gson()
+    private val mutexSync = Mutex()
+    private val mutexDownload = Mutex()
 
     override suspend fun syncPlaylists(): Result<Unit> {
+        return mutexSync.withLock {
+            syncPlaylistsInner()
+        }
+    }
+
+    private suspend fun syncPlaylistsInner(): Result<Unit> {
         return try {
             val accessToken = authPreferences.getAccessToken()
             val snNumber = authPreferences.getDeviceSnNumber()
 
             if (accessToken.isNullOrEmpty() || snNumber.isNullOrEmpty()) {
-                Timber.tag("APLAYLISTS").e("Missing authentication or device SN for playlist sync")
+                Timber.tag(TAG).e("Missing authentication or device SN for playlist sync")
                 return Result.failure(Exception("Not authenticated or device not registered"))
             }
 
-            Timber.tag("APLAYLISTS").d("Syncing playlists for device: $snNumber")
-            val response = withContext(Dispatchers.IO){
-                playlistApi.getPlaylists(
-                    token = "Bearer $accessToken",
-                    snNumber = snNumber
-                )
+            Timber.tag(TAG).d("Syncing playlists for device: $snNumber")
+
+            val syncedWithin = System.currentTimeMillis() - (playlistDao.getOldestSyncTime() ?: 0L)
+            if (syncedWithin < Constants.SYNC_INTERVAL_MIN) {
+                Timber.tag(TAG).w("Last sync time was too recent: $syncedWithin ms ago")
+                return Result.success(Unit)
             }
 
-            Timber.tag("APLAYLISTS").d("Fetched ${response.frontScreen.countPlaylist} playlists from server")
+            val response = playlistApiProvider.get().getPlaylists(
+                token = "Bearer $accessToken",
+                snNumber = snNumber
+            )
+
+            Timber.tag(TAG).d("Fetched ${response.frontScreen.countPlaylist} playlists from server")
 
             // Convert and save playlists to database
             val resolution = response.frontScreen.resolution
@@ -72,13 +89,12 @@ class PlaylistRepositoryImpl @Inject constructor(
                     createdAt = playlistDetail.name,
                     updatedAt = playlistDetail.name,
                     downloadStatus = existing?.downloadStatus ?: DownloadStatus.PENDING.name,
-                    downloadedItems = existing?.downloadedItems ?: 0,
                     missingFiles = existing?.missingFiles,
                     lastSyncedAt = System.currentTimeMillis()
                 )
             }
 
-            Timber.tag("APLAYLISTS").d(playlistEntities.toString())
+            Timber.tag(TAG).d(playlistEntities.toString())
             playlistDao.insertPlaylists(playlistEntities)
 
             // Save media items for each playlist
@@ -89,7 +105,7 @@ class PlaylistRepositoryImpl @Inject constructor(
                     val localPath = existingMedia?.localPath
                         ?: mediaFileManager.getMediaPath(mediaDetail.mediaId)
 
-                    MediaEntity(
+                    val entity = MediaEntity(
                         id = mediaDetail.mediaId,
                         playlistId = playlistDetail.id,
                         name = mediaDetail.mediaName,
@@ -104,22 +120,37 @@ class PlaylistRepositoryImpl @Inject constructor(
                         order = mediaDetail.order,
                         createdAt = mediaDetail.downloadDate,
                         updatedAt = mediaDetail.downloadDate,
-                        localPath = mediaDetail.localPath,
+                        localPath = localPath,
                         isDownloaded = existingMedia?.isDownloaded ?: false,
                         downloadedAt = existingMedia?.downloadedAt,
                         downloadProgress = existingMedia?.downloadProgress ?: 0
                     )
+                    Timber.tag(TAG).d(entity.toString())
+                    entity
                 }
 
                 mediaDao.insertMediaList(mediaEntities)
+                Timber.tag(TAG).d("Updated ${mediaEntities.size} media for playlist ${playlistDetail.id}")
             }
 
-            Timber.tag("APLAYLISTS").d("Playlists synced successfully")
+            Timber.tag(TAG).d("Playlists synced successfully. Total: ${playlistEntities.size}")
             Result.success(Unit)
         } catch (e: Exception) {
-            Timber.tag("APLAYLISTS").e(e, "Failed to sync playlists")
+            Timber.tag(TAG).e(e, "Failed to sync playlists")
             Result.failure(e)
         }
+    }
+
+    override suspend fun getActivePlaylist(): Playlist? {
+        val current = playlistDao.getActivePlaylist() ?: return null
+
+        Timber.tag(TAG).d("Loaded active playlist: ${current.name} (id=${current.id})")
+        if (DownloadStatus.READY.name != current.downloadStatus) {
+            Timber.tag(TAG).d("Current playlist not ready, downloading: ${current.id}")
+            downloadPlaylist(current.id)
+        }
+
+        return mapEntityToDomain(current)
     }
 
     override suspend fun getPlaylists(): List<Playlist> {
@@ -127,7 +158,7 @@ class PlaylistRepositoryImpl @Inject constructor(
             val playlistEntities = playlistDao.getAllPlaylists()
             playlistEntities.map { entity -> mapEntityToDomain(entity) }
         } catch (e: Exception) {
-            Timber.tag("APLAYLISTS").e(e, "Failed to get playlists from database")
+            Timber.tag(TAG).e(e, "Failed to get playlists from database")
             emptyList()
         }
     }
@@ -138,27 +169,43 @@ class PlaylistRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getPlaylist(playlistId: Int): Playlist {
-        val entity = playlistDao.getPlaylistById(playlistId)
-            ?: throw Exception("Playlist not found: $playlistId")
+    override suspend fun getPlaylist(playlistId: Int): Playlist? {
+        val entity = playlistDao.getPlaylistById(playlistId) ?: return null
+
+        Timber.tag(TAG).d("Loaded playlist: ${entity.name} (id=${entity.id})")
+        if (DownloadStatus.READY.name != entity.downloadStatus) {
+            Timber.tag(TAG).d("Playlist not ready, downloading: ${entity.id}")
+            downloadPlaylist(entity.id)
+        }
         return mapEntityToDomain(entity)
     }
 
     override suspend fun downloadPlaylist(playlistId: Int): Result<Unit> {
+        return mutexDownload.withLock {
+            downloadPlaylistInner(playlistId)
+        }
+    }
+
+    private suspend fun downloadPlaylistInner(playlistId: Int): Result<Unit> {
         return try {
-            Timber.tag("DWNLD").d("Starting download for playlist: $playlistId")
+            Timber.tag(TAG).d("Starting download for playlist: $playlistId")
+
+            if (DownloadStatus.READY.name == playlistDao.getDownloadStatusById(playlistId)) {
+                Timber.tag(TAG).d("Playlist: $playlistId is already downloaded, skipping")
+                return Result.success(Unit)
+            }
 
             // Update status to DOWNLOADING
             playlistDao.updateDownloadStatus(
                 playlistId = playlistId,
                 status = DownloadStatus.DOWNLOADING.name,
-                downloadedItems = 0
             )
 
             val mediaList = mediaDao.getMediaByPlaylistId(playlistId)
             var downloadedCount = 0
             val missingFiles = mutableListOf<String>()
 
+            Timber.tag(TAG).d("Medias to download: ${mediaList.size}")
             for (media in mediaList) {
                 try {
                     // Skip if already downloaded
@@ -170,42 +217,45 @@ class PlaylistRepositoryImpl @Inject constructor(
                         }
                     }
 
-                    Timber.tag("DWNLD").d("URL: Downloading media: ${media.name} (${media.id})")
+                    Timber.tag(TAG).d("URL: Downloading media: ${media.name} (${media.id})")
 
+                    // throttle logging
+                    var lastLogged = -1
                     val localPath = mediaFileManager.downloadMedia(
                         url = media.file,
                         mediaId = media.id
                     ) { progress ->
-                        // Update progress if needed
-                        Timber.tag("DWNLD").v("Download progress for ${media.id}: $progress%")
+                        val throttled = progress / 5 // log every 5%
+                        if (throttled != lastLogged) {
+                            lastLogged = throttled
+                            Timber.tag(TAG).v("Download progress for ${media.id}: $progress%")
+                        }
                     }
 
                     if (localPath != null) {
                         // Verify checksum if available
-                        val isValid = if (!media.checksum.isNullOrEmpty()) {
-                            mediaFileManager.verifyChecksum(localPath, media.checksum)
-                        } else {
-                            true
-                        }
+                        val isValid = mediaFileManager.verifyChecksum(localPath, media.checksum)
 
-                        if (true) {
+                        if (isValid) {
                             mediaDao.markAsDownloaded(
                                 mediaId = media.id,
                                 localPath = localPath,
                                 downloadedAt = System.currentTimeMillis()
                             )
                             downloadedCount++
-                            Timber.d("Media downloaded successfully: ${media.name}")
+                            Timber.tag(TAG).d("Media downloaded successfully: ${media.name}")
                         } else {
-                            Timber.tag("DWNLD").e("Checksum verification failed for media: ${media.name}")
+                            Timber.tag(TAG).e("Checksum verification failed for media: ${media.name}")
                             missingFiles.add(media.name)
                         }
                     } else {
-                        Timber.tag("DWNLD").e("Failed to download media: ${media.name}")
+                        Timber.tag(TAG).e("Failed to download media: ${media.name}")
                         missingFiles.add(media.name)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    Timber.tag("DWNLD").e(e, "Error downloading media: ${media.name}")
+                    Timber.tag(TAG).e(e, "Error downloading media: ${media.name}")
                     missingFiles.add(media.name)
                 }
             }
@@ -221,7 +271,6 @@ class PlaylistRepositoryImpl @Inject constructor(
             if (playlist != null) {
                 val updatedPlaylist = playlist.copy(
                     downloadStatus = finalStatus.name,
-                    downloadedItems = downloadedCount,
                     missingFiles = if (missingFiles.isNotEmpty()) {
                         gson.toJson(missingFiles)
                     } else null
@@ -229,16 +278,22 @@ class PlaylistRepositoryImpl @Inject constructor(
                 playlistDao.updatePlaylist(updatedPlaylist)
             }
 
-            Timber.tag("DWNLD").d("Playlist download completed: $downloadedCount/${mediaList.size} items")
+            Timber.tag(TAG).d("Playlist download completed: $downloadedCount/${mediaList.size} items")
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            Timber.tag(TAG).e("Download playlist: $playlistId cancelled due to coroutine cancellation")
+            playlistDao.updateDownloadStatus(
+                playlistId = playlistId,
+                status = DownloadStatus.FAILED.name,
+            )
+            throw e
         } catch (e: Exception) {
-            Timber.tag("DWNLD").e(e, "Failed to download playlist: $playlistId")
+            Timber.tag(TAG).e(e, "Failed to download playlist: $playlistId")
 
             // Update status to FAILED
             playlistDao.updateDownloadStatus(
                 playlistId = playlistId,
                 status = DownloadStatus.FAILED.name,
-                downloadedItems = 0
             )
 
             Result.failure(e)
@@ -246,9 +301,9 @@ class PlaylistRepositoryImpl @Inject constructor(
     }
 
     override suspend fun downloadRemainingPlaylistsInBackground() {
-        CoroutineScope(Dispatchers.IO).launch {
+        withContext(Dispatchers.IO) {
             try {
-                Timber.d("Starting background download for remaining playlists")
+                Timber.tag(TAG).d("Starting background download for remaining playlists")
                 val playlists = playlistDao.getAllPlaylists()
 
                 for (playlist in playlists) {
@@ -257,20 +312,20 @@ class PlaylistRepositoryImpl @Inject constructor(
                         continue
                     }
 
-                    Timber.d("Background downloading playlist: ${playlist.name}")
+                    Timber.tag(TAG).d("Background downloading playlist: ${playlist.name}")
                     downloadPlaylist(playlist.id)
                 }
 
-                Timber.d("Background playlist downloads completed")
+                Timber.tag(TAG).d("Background playlist downloads completed")
             } catch (e: Exception) {
-                Timber.e(e, "Error in background playlist download")
+                Timber.tag(TAG).e(e, "Error in background playlist download")
             }
         }
     }
 
     override suspend fun cleanupOldPlaylists(playlistIdsToKeep: List<Int>) {
         try {
-            Timber.d("Cleaning up old playlists, keeping: $playlistIdsToKeep")
+            Timber.tag(TAG).d("Cleaning up old playlists, keeping: $playlistIdsToKeep")
 
             // Get all playlists that will be deleted
             val allPlaylists = playlistDao.getAllPlaylists()
@@ -291,9 +346,9 @@ class PlaylistRepositoryImpl @Inject constructor(
                 playlistDao.deletePlaylistsNotIn(playlistIdsToKeep)
             }
 
-            Timber.d("Old playlists cleaned up successfully")
+            Timber.tag(TAG).d("Old playlists cleaned up successfully")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to cleanup old playlists")
+            Timber.tag(TAG).e(e, "Failed to cleanup old playlists")
         }
     }
 
@@ -344,7 +399,6 @@ class PlaylistRepositoryImpl @Inject constructor(
             updatedAt = entity.updatedAt,
             media = mediaList,
             downloadStatus = DownloadStatus.valueOf(entity.downloadStatus),
-            downloadedItems = entity.downloadedItems,
             missingFiles = missingFilesList,
             lastSyncedAt = entity.lastSyncedAt
         )

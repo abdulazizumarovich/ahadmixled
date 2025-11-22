@@ -1,6 +1,7 @@
 package uz.iportal.axadmixled.data.repository
 
 import timber.log.Timber
+
 import uz.iportal.axadmixled.data.local.database.dao.MediaDao
 import uz.iportal.axadmixled.data.local.storage.MediaFileManager
 import uz.iportal.axadmixled.domain.model.Media
@@ -8,6 +9,8 @@ import uz.iportal.axadmixled.domain.model.MediaType
 import uz.iportal.axadmixled.domain.repository.MediaRepository
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "MediaRepository"
 
 @Singleton
 class MediaRepositoryImpl @Inject constructor(
@@ -17,13 +20,13 @@ class MediaRepositoryImpl @Inject constructor(
 
     override suspend fun downloadMedia(media: Media, onProgress: (Int) -> Unit): Result<String> {
         return try {
-            Timber.d("Downloading media: ${media.name} (ID: ${media.id})")
+            Timber.tag(TAG).d("Downloading media: ${media.name} (ID: ${media.id})")
 
             // Check if already downloaded
             if (media.isDownloaded && !media.localPath.isNullOrEmpty()) {
                 val file = java.io.File(media.localPath)
                 if (file.exists()) {
-                    Timber.d("Media already exists: ${media.localPath}")
+                    Timber.tag(TAG).d("Media already exists: ${media.localPath}")
                     return Result.success(media.localPath)
                 }
             }
@@ -35,7 +38,7 @@ class MediaRepositoryImpl @Inject constructor(
             )
 
             if (localPath.isNullOrEmpty()) {
-                Timber.e("Failed to download media: ${media.name}")
+                Timber.tag(TAG).e("Failed to download media: ${media.name}")
                 return Result.failure(Exception("Download failed"))
             }
 
@@ -43,7 +46,7 @@ class MediaRepositoryImpl @Inject constructor(
             val isValid = if (!media.checksum.isNullOrEmpty()) {
                 val verified = mediaFileManager.verifyChecksum(localPath, media.checksum)
                 if (!verified) {
-                    Timber.e("Checksum verification failed for: ${media.name}")
+                    Timber.tag(TAG).e("Checksum verification failed for: ${media.name}")
                     // Delete invalid file
                     mediaFileManager.deleteMedia(localPath)
                     return Result.failure(Exception("Checksum verification failed"))
@@ -61,13 +64,13 @@ class MediaRepositoryImpl @Inject constructor(
                     downloadedAt = System.currentTimeMillis()
                 )
 
-                Timber.d("Media downloaded and verified successfully: ${media.name}")
+                Timber.tag(TAG).d("Media downloaded and verified successfully: ${media.name}")
                 Result.success(localPath)
             } else {
                 Result.failure(Exception("Media validation failed"))
             }
         } catch (e: Exception) {
-            Timber.e(e, "Error downloading media: ${media.name}")
+            Timber.tag(TAG).e(e, "Error downloading media: ${media.name}")
             Result.failure(e)
         }
     }
@@ -97,7 +100,7 @@ class MediaRepositoryImpl @Inject constructor(
                 )
             }
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get media for playlist: $playlistId")
+            Timber.tag(TAG).e(e, "Failed to get media for playlist: $playlistId")
             emptyList()
         }
     }
@@ -105,26 +108,26 @@ class MediaRepositoryImpl @Inject constructor(
     override suspend fun verifyMediaChecksum(media: Media): Boolean {
         return try {
             if (media.localPath.isNullOrEmpty()) {
-                Timber.w("No local path for media: ${media.name}")
+                Timber.tag(TAG).w("No local path for media: ${media.name}")
                 return false
             }
 
             if (media.checksum.isNullOrEmpty()) {
-                Timber.d("No checksum available for media: ${media.name}, skipping verification")
+                Timber.tag(TAG).d("No checksum available for media: ${media.name}, skipping verification")
                 return true
             }
 
             val isValid = mediaFileManager.verifyChecksum(media.localPath, media.checksum)
 
             if (isValid) {
-                Timber.d("Checksum verified successfully for: ${media.name}")
+                Timber.tag(TAG).d("Checksum verified successfully for: ${media.name}")
             } else {
-                Timber.e("Checksum verification failed for: ${media.name}")
+                Timber.tag(TAG).e("Checksum verification failed for: ${media.name}")
             }
 
             isValid
         } catch (e: Exception) {
-            Timber.e(e, "Error verifying checksum for media: ${media.name}")
+            Timber.tag(TAG).e(e, "Error verifying checksum for media: ${media.name}")
             false
         }
     }

@@ -1,26 +1,28 @@
 package uz.iportal.axadmixled.workers
 
 import android.content.Context
-import androidx.work.*
-import dagger.hilt.android.qualifiers.ApplicationContext
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkRequest
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
  * Initializes and schedules all background workers
  */
-@Singleton
-class WorkManagerInitializer @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-    private val workManager = WorkManager.getInstance(context)
+class WorkManagerInitializer() {
+    private lateinit var workManager: WorkManager
 
     /**
      * Initialize all periodic workers
      */
-    fun initialize() {
+    fun initialize(context: Context) {
+        Timber.d("Creating WorkManager instance")
+        workManager = WorkManager.getInstance(context)
         Timber.d("WorkManagerInitializer: Scheduling periodic workers")
         scheduleTokenRefresh()
         schedulePlaylistSync()
@@ -30,6 +32,8 @@ class WorkManagerInitializer @Inject constructor(
      * Schedule token refresh worker to run every 23 hours
      */
     private fun scheduleTokenRefresh() {
+        if (!::workManager.isInitialized) return
+
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -59,6 +63,8 @@ class WorkManagerInitializer @Inject constructor(
      * Schedule playlist sync worker to run every 6 hours
      */
     private fun schedulePlaylistSync() {
+        if (!::workManager.isInitialized) return
+
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -88,6 +94,8 @@ class WorkManagerInitializer @Inject constructor(
      * Cancel all workers
      */
     fun cancelAll() {
+        if (!::workManager.isInitialized) return
+
         workManager.cancelUniqueWork(TokenRefreshWorker.WORK_NAME)
         workManager.cancelUniqueWork(PlaylistSyncWorker.WORK_NAME)
         Timber.d("WorkManagerInitializer: All workers cancelled")

@@ -10,11 +10,12 @@ import uz.iportal.axadmixled.data.remote.api.ScreenshotApi
 import uz.iportal.axadmixled.domain.repository.ScreenshotRepository
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Singleton
 class ScreenshotRepositoryImpl @Inject constructor(
-    private val screenshotApi: ScreenshotApi,
+    private val screenshotApiProvider: Provider<ScreenshotApi>,
     private val authPreferences: AuthPreferences
 ) : ScreenshotRepository {
 
@@ -49,7 +50,7 @@ class ScreenshotRepositoryImpl @Inject constructor(
             )
 
             // Upload screenshot
-            screenshotApi.uploadScreenshot(
+            screenshotApiProvider.get().uploadScreenshot(
                 token = "Bearer $accessToken",
                 snNumber = snNumberBody,
                 mediaId = mediaIdBody,
