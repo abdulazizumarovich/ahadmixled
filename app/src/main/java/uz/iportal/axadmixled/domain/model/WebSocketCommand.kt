@@ -7,7 +7,7 @@ sealed class WebSocketCommand {
     object Pause : WebSocketCommand()
     object Next : WebSocketCommand()
     object Previous : WebSocketCommand()
-    object ReloadPlaylist : WebSocketCommand()
+    data class ReloadPlaylist(val newPlaylist: Int? = null) : WebSocketCommand()
     data class SwitchPlaylist(val playlistId: Int) : WebSocketCommand()
     data class PlayMedia(val mediaId: Int?, val mediaIndex: Int?) : WebSocketCommand()
     data class ShowTextOverlay(val textOverlay: TextOverlay) : WebSocketCommand()
@@ -23,6 +23,8 @@ data class WebSocketCommandDto(
     val playlistId: Int? = null,
     val mediaId: Int? = null,
     val mediaIndex: Int? = null,
+    @SerializedName("params")
+    val parameters: Map<String, Any>? = null,
     @SerializedName("text_overlay")
     val textOverlay: TextOverlayDto? = null,
     val brightness: Int? = null,

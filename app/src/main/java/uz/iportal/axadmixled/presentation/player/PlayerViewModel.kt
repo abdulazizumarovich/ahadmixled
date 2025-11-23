@@ -1,7 +1,9 @@
 package uz.iportal.axadmixled.presentation.player
 
+import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,22 +14,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import uz.iportal.axadmixled.data.remote.websocket.WebSocketManager
-import uz.iportal.axadmixled.domain.model.DownloadStatus
 import uz.iportal.axadmixled.domain.model.Playlist
 import uz.iportal.axadmixled.domain.model.TextOverlay
 import uz.iportal.axadmixled.domain.model.WebSocketCommand
-import uz.iportal.axadmixled.domain.repository.DeviceRepository
 import uz.iportal.axadmixled.domain.repository.PlaylistRepository
 import uz.iportal.axadmixled.util.NetworkMonitor
+import uz.iportal.axadmixled.util.PlayerListener
 import javax.inject.Inject
 
 private const val TAG = "PlayerViewModel"
 
 @HiltViewModel
-class PlayerViewModel @Inject constructor(
+class PlayerViewModel
+@OptIn(UnstableApi::class)
+@Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val webSocketManager: WebSocketManager,
-    private val deviceRepository: DeviceRepository,
+    private val playerListener: PlayerListener,
     private val networkMonitor: NetworkMonitor
 ) : ViewModel() {
 
@@ -40,6 +43,12 @@ class PlayerViewModel @Inject constructor(
     init {
         observeWebSocketCommands()
         observeNetworkChanges()
+        playerListener.onPlaylistPlaybackError = { playlistId ->
+            viewModelScope.launch {
+                playlistRepository.deactivatePlaylist(playlistId)
+                loadCurrentPlaylist()
+            }
+        }
     }
 
     private fun observeWebSocketCommands() {
@@ -59,6 +68,7 @@ class PlayerViewModel @Inject constructor(
                     Timber.tag(TAG).d("Network connected, reconnecting WebSocket and syncing playlists")
                     webSocketManager.connect()
                     syncPlaylists()
+                    downloadPlaylists()
                 }
             }
         }
@@ -139,18 +149,17 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    private suspend fun reloadPlaylist() {
-        val currentPlaylist = _currentPlaylist.value
-        if (currentPlaylist == null) {
-            Timber.tag(TAG).w("Cannot reload playlist: no current playlist")
+    private suspend fun reloadPlaylist(playlistId: Int? = null) {
+        val playlistIdToReload = playlistId ?: _currentPlaylist.value?.id
+        if (playlistIdToReload == null) {
+            Timber.tag(TAG).e("Reloading playlist failed, neither new playlist is not specified not current playlist is available")
             return
         }
 
         try {
-//            Timber.tag(TAG).d("Reloading playlist: ${currentPlaylist()}")
-//            playlistRepository.downloadPlaylist(currentPlaylist.id)
+            Timber.tag(TAG).d("Reloading playlist: $playlistIdToReload")
+            playlistRepository.syncPlaylists(forceRenew = true)
             loadCurrentPlaylist()
-            _playerCommand.emit(PlayerCommand.ReloadCurrentPlaylist)
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to reload playlist")
         }
@@ -159,7 +168,7 @@ class PlayerViewModel @Inject constructor(
     private suspend fun switchPlaylist(playlistId: Int) {
         try {
             Timber.tag(TAG).d("Switching to playlist: $playlistId")
-            val playlist = playlistRepository.getPlaylist(playlistId)
+            val playlist = playlistRepository.switchPlaylist(playlistId)
             if (playlist == null) {
                 Timber.tag(TAG).e("No playlist found for: $playlistId")
                 return
@@ -190,6 +199,15 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    private suspend fun downloadPlaylists() {
+        try {
+            Timber.tag(TAG).d("Downloading playlists to local")
+            playlistRepository.downloadRemainingPlaylistsInBackground()
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to download playlists")
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         Timber.tag(TAG).d("PlayerViewModel cleared")
@@ -201,7 +219,6 @@ sealed class PlayerCommand {
     object Pause : PlayerCommand()
     object Next : PlayerCommand()
     object Previous : PlayerCommand()
-    object ReloadCurrentPlaylist : PlayerCommand()
     data class SwitchPlaylist(val playlist: Playlist) : PlayerCommand()
     data class PlaySpecificMedia(val mediaId: Int?, val mediaIndex: Int?) : PlayerCommand()
     data class ShowTextOverlay(val overlay: TextOverlay) : PlayerCommand()

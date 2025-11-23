@@ -41,13 +41,13 @@ class PlaylistRepositoryImpl @Inject constructor(
     private val mutexSync = Mutex()
     private val mutexDownload = Mutex()
 
-    override suspend fun syncPlaylists(): Result<Unit> {
+    override suspend fun syncPlaylists(forceRenew: Boolean): Result<Unit> {
         return mutexSync.withLock {
-            syncPlaylistsInner()
+            syncPlaylistsInner(forceRenew)
         }
     }
 
-    private suspend fun syncPlaylistsInner(): Result<Unit> {
+    private suspend fun syncPlaylistsInner(forceRenew: Boolean): Result<Unit> {
         return try {
             val accessToken = authPreferences.getAccessToken()
             val snNumber = authPreferences.getDeviceSnNumber()
@@ -57,10 +57,10 @@ class PlaylistRepositoryImpl @Inject constructor(
                 return Result.failure(Exception("Not authenticated or device not registered"))
             }
 
-            Timber.tag(TAG).d("Syncing playlists for device: $snNumber")
+            Timber.tag(TAG).d("Syncing playlists for device: $snNumber, forced: $forceRenew")
 
             val syncedWithin = System.currentTimeMillis() - (playlistDao.getOldestSyncTime() ?: 0L)
-            if (syncedWithin < Constants.SYNC_INTERVAL_MIN) {
+            if (!forceRenew && syncedWithin < Constants.SYNC_INTERVAL_MIN) {
                 Timber.tag(TAG).w("Last sync time was too recent: $syncedWithin ms ago")
                 return Result.success(Unit)
             }
@@ -83,7 +83,7 @@ class PlaylistRepositoryImpl @Inject constructor(
                     name = playlistDetail.name,
                     description = playlistDetail.name,
                     isActive = playlistDetail.status.isReady,
-                    priority = playlistDetail.id,
+                    priority = existing?.priority ?: playlistDetail.id,
                     duration = playlistDetail.duration,
                     mediaCount = playlistDetail.countMediaItems,
                     createdAt = playlistDetail.name,
@@ -105,6 +105,8 @@ class PlaylistRepositoryImpl @Inject constructor(
                     val localPath = existingMedia?.localPath
                         ?: mediaFileManager.getMediaPath(mediaDetail.mediaId)
 
+                    val isDownloaded = mediaFileManager.verifyChecksum(localPath ?: "", mediaDetail.checksum)
+
                     val entity = MediaEntity(
                         id = mediaDetail.mediaId,
                         playlistId = playlistDetail.id,
@@ -121,11 +123,12 @@ class PlaylistRepositoryImpl @Inject constructor(
                         createdAt = mediaDetail.downloadDate,
                         updatedAt = mediaDetail.downloadDate,
                         localPath = localPath,
-                        isDownloaded = existingMedia?.isDownloaded ?: false,
+                        isDownloaded = isDownloaded,
                         downloadedAt = existingMedia?.downloadedAt,
                         downloadProgress = existingMedia?.downloadProgress ?: 0
                     )
-                    Timber.tag(TAG).d(entity.toString())
+                    Timber.tag(TAG).d("Existing media: $existingMedia")
+                    Timber.tag(TAG).d("Updated media : $entity")
                     entity
                 }
 
@@ -150,7 +153,13 @@ class PlaylistRepositoryImpl @Inject constructor(
             downloadPlaylist(current.id)
         }
 
-        return mapEntityToDomain(current)
+        try {
+            return mapEntityToDomain(current)
+        } catch (e: IllegalArgumentException) {
+            playlistDao.updatePlaylist(current.copy(isActive = false))
+            Timber.tag(TAG).e(e, "Skipping to next active, ${current.id} is deactivated")
+            return getActivePlaylist()
+        }
     }
 
     override suspend fun getPlaylists(): List<Playlist> {
@@ -169,15 +178,22 @@ class PlaylistRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getPlaylist(playlistId: Int): Playlist? {
-        val entity = playlistDao.getPlaylistById(playlistId) ?: return null
+    override suspend fun switchPlaylist(playlistId: Int): Playlist? {
+        val entity = playlistDao.getPlaylistById(playlistId)
+        val playlist = if (entity == null) {
+            syncPlaylists(forceRenew = true)
+            playlistDao.getPlaylistById(playlistId) ?: return null
+        } else entity
 
-        Timber.tag(TAG).d("Loaded playlist: ${entity.name} (id=${entity.id})")
-        if (DownloadStatus.READY.name != entity.downloadStatus) {
-            Timber.tag(TAG).d("Playlist not ready, downloading: ${entity.id}")
-            downloadPlaylist(entity.id)
+
+        Timber.tag(TAG).d("Loaded playlist: ${playlist.name} (id=${playlist.id})")
+        if (DownloadStatus.READY.name != playlist.downloadStatus) {
+            Timber.tag(TAG).d("Playlist not ready, downloading: ${playlist.id}")
+            downloadPlaylist(playlist.id)
         }
-        return mapEntityToDomain(entity)
+
+        playlistDao.prioritize(playlist.id, Int.MAX_VALUE)
+        return mapEntityToDomain(playlist)
     }
 
     override suspend fun downloadPlaylist(playlistId: Int): Result<Unit> {
@@ -323,6 +339,12 @@ class PlaylistRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun deactivatePlaylist(playlistId: Int) {
+        playlistDao.getPlaylistById(playlistId)?.let {
+            playlistDao.updatePlaylist(it.copy(isActive = false))
+        }
+    }
+
     override suspend fun cleanupOldPlaylists(playlistIdsToKeep: List<Int>) {
         try {
             Timber.tag(TAG).d("Cleaning up old playlists, keeping: $playlistIdsToKeep")
@@ -354,7 +376,9 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     private suspend fun mapEntityToDomain(entity: PlaylistEntity): Playlist {
         val mediaEntities = mediaDao.getMediaByPlaylistId(entity.id)
-        val mediaList = mediaEntities.map { mediaEntity ->
+        val mediaList = mediaEntities//.filter {
+//            it.mediaType == MediaType.IMAGE.name || mediaFileManager.isCodecSupported(it.localPath)
+        .map { mediaEntity ->
             Media(
                 id = mediaEntity.id,
                 name = mediaEntity.name,
@@ -375,6 +399,8 @@ class PlaylistRepositoryImpl @Inject constructor(
                 downloadProgress = mediaEntity.downloadProgress
             )
         }
+
+        require(mediaList.isNotEmpty()) { "No supported media for playlist" }
 
         val missingFilesList = if (!entity.missingFiles.isNullOrEmpty()) {
             try {

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
+import uz.iportal.axadmixled.util.FileLoggingTree
 import uz.iportal.axadmixled.util.StorageMonitor
 import uz.iportal.axadmixled.workers.LedPlayerWorkerFactory
 import uz.iportal.axadmixled.workers.WorkManagerInitializer
@@ -27,13 +28,7 @@ class LedPlayerApplication : Application(), Configuration.Provider {
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         } else {
-            // In production, you might want to use a custom tree
-            // that logs to a file or remote service
-            Timber.plant(object : Timber.Tree() {
-                override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-                    // Log to file or remote service
-                }
-            })
+            Timber.plant(FileLoggingTree(this))
         }
 
         Timber.d("LedPlayerApplication started")

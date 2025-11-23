@@ -29,7 +29,8 @@ data class StorageInfo(
     val totalSpace: Long,
     val freeSpace: Long,
     val usedSpace: Long,
-    val usedByApp: Long = 0L
+    val usedByApp: Long = 0L,
+    val currentPlaylistId: Long = 0L
 ) {
     val freeSpacePercentage: Float
         get() = (freeSpace.toFloat() / totalSpace.toFloat()) * 100

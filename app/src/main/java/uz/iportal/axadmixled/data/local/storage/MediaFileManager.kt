@@ -1,6 +1,13 @@
 package uz.iportal.axadmixled.data.local.storage
 
 import android.content.Context
+import android.media.MediaCodecInfo
+import android.media.MediaCodecList
+import android.os.Build
+import android.webkit.MimeTypeMap
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -8,11 +15,12 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import timber.log.Timber
-
 import java.io.File
 import java.security.MessageDigest
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+
 
 private const val TAG = "MediaFileManager"
 
@@ -114,6 +122,10 @@ class MediaFileManager @Inject constructor(
 
         return try {
             val file = File(filePath)
+            if (!file.exists()) {
+                Timber.tag(TAG).e("Checksum not verified, no file is found")
+                return false
+            }
             val digest = MessageDigest.getInstance("MD5")
             val inputStream = file.inputStream()
             val buffer = ByteArray(1024)
@@ -146,5 +158,45 @@ class MediaFileManager @Inject constructor(
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to delete media file")
         }
+    }
+
+    @OptIn(UnstableApi::class)
+    fun isCodecSupported(localPath: String?): Boolean {
+        if (localPath.isNullOrEmpty()) return true // skip online media
+
+        try {
+            val fileExtension = MimeTypeMap.getFileExtensionFromUrl(localPath)
+            val mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                fileExtension.lowercase(Locale.getDefault())
+            ) ?: run {
+                Timber.tag(TAG).d("Mime type unknown $fileExtension")
+                return false
+            }
+
+            return infos(mimeType)
+        } catch (e: MediaCodecUtil.DecoderQueryException) {
+            Timber.tag(TAG).e(e, "Failed querying decoders")
+            return false
+        }
+    }
+
+    fun infos(mimeType: String): Boolean {
+        val codecList = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+        val codecInfos: Array<MediaCodecInfo> = codecList.codecInfos
+
+        for (codecInfo in codecInfos) {
+            // Skip encoders, only check decoders
+            if (codecInfo.isEncoder) {
+                continue
+            }
+
+            Timber.tag(TAG).d("DecoderInfo for $codecInfo: ${codecInfo.supportedTypes.joinToString()}")
+            val supported = codecInfo.supportedTypes.filter { it.lowercase() contentEquals mimeType.lowercase() }
+            Timber.tag(TAG).d("DecoderInfo for $mimeType: ${supported.joinToString()}")
+
+            if (supported.isNotEmpty())
+                return true
+        }
+        return false
     }
 }

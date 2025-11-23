@@ -1,6 +1,7 @@
 package uz.iportal.axadmixled.data.remote.websocket
 
 import com.google.gson.Gson
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -20,7 +21,6 @@ import uz.iportal.axadmixled.core.constants.ApiConstants
 import uz.iportal.axadmixled.data.local.preferences.AuthPreferences
 import uz.iportal.axadmixled.domain.model.DeviceStatusMessage
 import uz.iportal.axadmixled.domain.model.DeviceStorageUpdate
-import uz.iportal.axadmixled.domain.model.PlaylistStatusMessage
 import uz.iportal.axadmixled.domain.model.ReadyPlaylistsMessage
 import uz.iportal.axadmixled.domain.model.StorageInfo
 import uz.iportal.axadmixled.domain.model.TextAnimation
@@ -31,14 +31,9 @@ import uz.iportal.axadmixled.domain.model.WebSocketCommandDto
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
 import uz.iportal.axadmixled.util.Constants
 import uz.iportal.axadmixled.util.StorageMonitor
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import java.util.concurrent.TimeUnit
+import uz.iportal.axadmixled.util.getInt
 import javax.inject.Inject
 import javax.inject.Singleton
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 
 private const val TAG = "WebSocketManager"
 
@@ -48,12 +43,11 @@ class WebSocketManager @Inject constructor(
     private val deviceRepository: DeviceRepository,
     private val storageMonitor: StorageMonitor,
     private val okHttpClient: OkHttpClient,
-    private val gson: Gson,
-//    private val okHttpClient: OkHttpClient
+    private val gson: Gson
 ) {
     private var webSocket: WebSocket? = null
     private var isConnected = false
-    private var isReconnecting = false  // Track if reconnect is already scheduled
+    private var isConnecting = false  // Track if reconnect is already scheduled
     private val _commands = MutableSharedFlow<WebSocketCommand>(
         replay = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
@@ -64,8 +58,8 @@ class WebSocketManager @Inject constructor(
 
     fun connect() {
         // Prevent multiple simultaneous connection attempts
-        if (isConnected /* || isReconnecting*/) { // observed that checking for isReconnecting stops reconnection
-            Timber.tag(TAG).d("Already connected or reconnecting, skipping connect()")
+        if (isConnected || isConnecting) {
+            Timber.tag(TAG).d("Already connected or connecting, skipping connect()")
             return
         }
 
@@ -82,14 +76,14 @@ class WebSocketManager @Inject constructor(
         Timber.tag(TAG).d("Connecting to WebSocket: $url")
         val request = Request.Builder().url(url).build()
 
-//        webSocket?.close(1000, "Reconnecting")
-
+        isConnecting = true
         webSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isConnected = true
-                isReconnecting = false  // Reset reconnecting flag
-                reconnectJob?.cancel()  // Cancel any pending reconnect attempts
+                isConnecting = false  // Reset reconnecting flag
                 Timber.tag(TAG).d("WebSocket connected successfully")
+                attempt = 0
+                retryDelay = Constants.WS_INITIAL_RETRY_DELAY
 
                 CoroutineScope(Dispatchers.IO).launch {
                     sendReadyPlaylists()
@@ -125,16 +119,9 @@ class WebSocketManager @Inject constructor(
     }
 
     private fun handleDisconnect(reason: String) {
-        // Prevent multiple reconnect attempts from running simultaneously
-        if (isReconnecting) {
-            Timber.tag(TAG).d("Reconnect already scheduled, ignoring duplicate disconnect: $reason")
-            return
-        }
-
         isConnected = false
-        isReconnecting = true
+        isConnecting = false
         Timber.tag(TAG).w("WebSocket disconnected: $reason. Starting reconnect...")
-
         scheduleReconnect()
     }
 
@@ -147,7 +134,9 @@ class WebSocketManager @Inject constructor(
                 "pause" -> WebSocketCommand.Pause
                 "next" -> WebSocketCommand.Next
                 "previous" -> WebSocketCommand.Previous
-                "reload_playlist" -> WebSocketCommand.ReloadPlaylist
+                "reload_playlist" -> WebSocketCommand.ReloadPlaylist(
+                    newPlaylist = commandDto.parameters.getInt("new_solution_id")
+                )
                 "switch_playlist" -> WebSocketCommand.SwitchPlaylist(
                     commandDto.playlistId ?: return
                 )
@@ -185,12 +174,9 @@ class WebSocketManager @Inject constructor(
                 }
             }
 
-//            CoroutineScope(Dispatchers.Main).launch {
             Timber.tag(TAG).d("Emitting command $command")
             val send = _commands.tryEmit(command)
-            if (!send)
-                Timber.tag(TAG).e("Failed to emit command $command")
-//            }
+            if (!send) Timber.tag(TAG).e("Failed to emit command $command")
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to parse WebSocket message")
         }
@@ -246,7 +232,7 @@ class WebSocketManager @Inject constructor(
     ) {
         if (!isConnected) return
 
-        CoroutineScope(Dispatchers.IO).launch {
+        /*CoroutineScope(Dispatchers.IO).launch {
             val snNumber = authPreferences.getDeviceSnNumber() ?: return@launch
 
             val message = DeviceStatusMessage(
@@ -259,33 +245,42 @@ class WebSocketManager @Inject constructor(
 
             val json = gson.toJson(message)
             webSocket?.send(json)
-        }
+            Timber.tag(TAG).d("Sent device status: $json")
+        }*/
     }
+
+    var retryDelay = Constants.WS_INITIAL_RETRY_DELAY
+    var attempt = 0
 
     private fun scheduleReconnect() {
         reconnectJob?.cancel()
+
+        if (attempt >= Constants.WS_MAX_RETRY_ATTEMPTS) {
+            Timber.tag(TAG)
+                .e("Failed to reconnect WebSocket after ${Constants.WS_MAX_RETRY_ATTEMPTS} attempts")
+            isConnecting = false  // Reset flag after reconnect loop finishes
+            return
+        }
+
         reconnectJob = CoroutineScope(Dispatchers.IO).launch {
-            var retryDelay = Constants.WS_INITIAL_RETRY_DELAY
-            var attempt = 0
-
-            while (!isConnected && attempt < Constants.WS_MAX_RETRY_ATTEMPTS) {
+            try {
                 delay(retryDelay)
-                Timber.tag(TAG).d("Reconnecting WebSocket, attempt ${attempt + 1}/${Constants.WS_MAX_RETRY_ATTEMPTS}")
-                connect()
-                attempt++
-                retryDelay = (retryDelay * 2).coerceAtMost(Constants.WS_MAX_RETRY_DELAY)
+            } catch (_: CancellationException) {
+                Timber.tag(TAG).e("Reconnect scheduled did not fire, coroutine cancelled")
+                attempt = 0
+                retryDelay = Constants.WS_INITIAL_RETRY_DELAY
+                return@launch
             }
 
-            if (!isConnected) {
-                Timber.tag(TAG)
-                    .e("Failed to reconnect WebSocket after ${Constants.WS_MAX_RETRY_ATTEMPTS} attempts")
-            }
-            isReconnecting = false  // Reset flag after reconnect loop finishes
+            retryDelay = (retryDelay * 2).coerceAtMost(Constants.WS_MAX_RETRY_DELAY)
+            Timber.tag(TAG).d("Reconnecting WebSocket, attempt ${attempt + 1}/${Constants.WS_MAX_RETRY_ATTEMPTS}")
+            connect()
+            attempt++
         }
     }
 
     fun disconnect() {
-        isReconnecting = false
+        isConnecting = false
         storageMonitorJob?.cancel()
         reconnectJob?.cancel()
         webSocket?.close(1000, "Client disconnect")

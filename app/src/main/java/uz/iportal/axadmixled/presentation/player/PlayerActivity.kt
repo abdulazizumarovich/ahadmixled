@@ -9,26 +9,24 @@ import android.view.WindowManager
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.RenderersFactory
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import coil.load
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import uz.iportal.axadmixled.databinding.ActivityPlayerBinding
 import uz.iportal.axadmixled.domain.model.MediaType
+import uz.iportal.axadmixled.domain.model.Playlist
 import uz.iportal.axadmixled.presentation.player.components.PlaybackState
+import uz.iportal.axadmixled.util.PlayerListener
 import uz.iportal.axadmixled.util.localPathToUri
 import javax.inject.Inject
+import javax.inject.Provider
 
 private const val TAG = "PlayerActivity"
 
@@ -42,10 +40,10 @@ class PlayerActivity : AppCompatActivity() {
 //    private var mediaList = emptyList<List<Playlist>>()
 
     @Inject
-    lateinit var defaultMediaSourceFactory: DefaultMediaSourceFactory
+    lateinit var exoPlayerProvider: Provider<ExoPlayer>
 
     @Inject
-    lateinit var renderersFactory: RenderersFactory
+    lateinit var playerListener: PlayerListener
 
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,6 +99,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun initializePlayer() {
         // Load playlist first
         viewModel.loadCurrentPlaylist()
+
+        binding.playerView.hideController() // Hide controller UI
+        binding.playerView.useController = false
     }
 
     @UnstableApi
@@ -111,7 +112,9 @@ class PlayerActivity : AppCompatActivity() {
                 viewModel.currentPlaylist.collect { playlist ->
 //                    Timber.tag(TAG).d("Playlist COUNT: ${playlist?.id}")
                     if (playlist == null) {
+                        playerListener.queuedPlaylistId = null
                         Timber.tag(TAG).w("No playlist available")
+                        binding.progress.visibility = View.VISIBLE
                         return@collect
                     }
                 //                        mediaList = playlist.filterNotNull()
@@ -121,42 +124,24 @@ class PlayerActivity : AppCompatActivity() {
                         exoPlayer?.stop()
                         exoPlayer?.release()
 
-                        exoPlayer = ExoPlayer.Builder(this@PlayerActivity)
-                            .setMediaSourceFactory(defaultMediaSourceFactory)
-                            .setRenderersFactory(renderersFactory)
-                            .build()
-//
-//                        exoPlayer!!.trackSelectionParameters = exoPlayer!!.trackSelectionParameters
-//                            .buildUpon()
-//                            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
-//                            .build()
+                        playerListener.queuedPlaylistId = playlist.id
+                        exoPlayer = exoPlayerProvider.get()
 
                         binding.playerView.player = exoPlayer
-                        binding.playerView.hideController() // Hide controller UI
-                        binding.playerView.useController = false
 
-                        val mediaItems = playlist.media
-                            .filter { it.mediaType != MediaType.IMAGE }
-                            .map {
-                                Timber.tag(TAG).d("Queuing Media: $it")
-                                var uri = it.localPath.localPathToUri()
-                                if (it.isDownloaded && uri != null) {
-                                    Timber.tag(TAG).d("From file: $uri")
-                                } else {
-                                    uri = it.file.toUri()
-                                    Timber.tag(TAG).d("From url: $uri")
-                                }
-
-                                MediaItem.fromUri(uri)
-                            }
+                        val mediaItems = playlist.mediaItems
+                        if (mediaItems.isEmpty()) {
+                            Timber.tag(TAG).e("Playlist has no media")
+                            return@collect
+                        }
 
                         exoPlayer?.apply {
                             setMediaItems(mediaItems)
-                            repeatMode = Player.REPEAT_MODE_ALL
                             prepare()
                             play()
                         }
 
+                        binding.progress.visibility = View.GONE
                         Timber.tag(TAG).d("MediaPlayerManager initialized successfully")
                     } catch (e: Exception) {
                         Timber.tag(TAG)
@@ -184,6 +169,18 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
     }
+
+    private val Playlist.mediaItems: List<MediaItem>
+        get() = media.filter { it.mediaType != MediaType.IMAGE && it.isDownloaded }
+            .map { it.id to it.localPath.localPathToUri() }
+            .filter { it.second != null }
+            .map {
+                Timber.tag(TAG).d("MediaItem from file: $it")
+                MediaItem.Builder()
+                    .setMediaId(it.first.toString())
+                    .setUri(it.second)
+                    .build()
+            }
 
     @OptIn(UnstableApi::class)
     private fun handlePlayerCommand(command: PlayerCommand) {
@@ -241,11 +238,6 @@ class PlayerActivity : AppCompatActivity() {
 //                    }
                 }
 
-                is PlayerCommand.ReloadCurrentPlaylist -> {
-                    Timber.tag("PlayerCommand").d("Handling ReloadCurrentPlaylist command")
-                    viewModel.loadCurrentPlaylist()
-                }
-
                 is PlayerCommand.SwitchPlaylist -> {
                     Timber.tag("PlayerCommand")
                         .d("Handling SwitchPlaylist command: ${command.playlist.name}")
@@ -274,7 +266,7 @@ class PlayerActivity : AppCompatActivity() {
                 is PlayerCommand.SetBrightness -> {
                     Timber.tag("PlayerCommand")
                         .d("Handling SetBrightness command: ${command.brightness}")
-//                    mediaPlayerManager.setBrightness(command.brightness)
+                    setBrightness(command.brightness)
                 }
 
                 is PlayerCommand.SetVolume -> {
@@ -284,6 +276,19 @@ class PlayerActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Timber.e(e, "Error handling player command: $command")
+        }
+    }
+
+    private fun setBrightness(level: Int) {
+        try {
+            val brightness = (level.coerceIn(0, 100) / 100f)
+            Timber.d("Setting brightness to $level% ($brightness)")
+
+            val layoutParams = window.attributes
+            layoutParams.screenBrightness = brightness
+            window.attributes = layoutParams
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to set brightness")
         }
     }
 

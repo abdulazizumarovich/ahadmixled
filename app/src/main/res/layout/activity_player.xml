@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:background="#000000"
     android:keepScreenOn="true"
     tools:context=".presentation.player.PlayerActivity">
@@ -12,7 +13,8 @@
         android:id="@+id/playerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="visible" />
+        android:visibility="visible"
+        app:surface_type="surface_view"/>
 
     <!-- ImageView for Images -->
     <ImageView
@@ -29,5 +31,13 @@
         android:id="@+id/textOverlayView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:indeterminateTint="@color/white"
+        android:indeterminate="true"
+        android:layout_gravity="center"/>
 
 </FrameLayout>

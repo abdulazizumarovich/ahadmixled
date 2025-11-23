@@ -24,6 +24,18 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE is_active = 1 ORDER BY priority DESC LIMIT 1")
     suspend fun getActivePlaylist(): PlaylistEntity?
 
+    /**
+     * Prioritizes a single row and all others will be deprioritized
+     */
+    @Query("""
+        UPDATE playlists 
+        SET priority = CASE 
+            WHEN id = :playlistId THEN :priority 
+            ELSE id 
+        END
+    """)
+    suspend fun prioritize(playlistId: Int, priority: Int)
+
     @Query("SELECT id FROM playlists")
     suspend fun getReadyPlaylistIds(): List<Int>
 
