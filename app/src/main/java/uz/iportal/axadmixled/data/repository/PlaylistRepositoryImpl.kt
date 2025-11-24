@@ -17,6 +17,7 @@ import uz.iportal.axadmixled.data.local.database.entities.PlaylistEntity
 import uz.iportal.axadmixled.data.local.preferences.AuthPreferences
 import uz.iportal.axadmixled.data.local.storage.MediaFileManager
 import uz.iportal.axadmixled.data.remote.api.PlaylistApi
+import uz.iportal.axadmixled.data.remote.websocket.WebSocketManager
 import uz.iportal.axadmixled.domain.model.DownloadStatus
 import uz.iportal.axadmixled.domain.model.Media
 import uz.iportal.axadmixled.domain.model.MediaType
@@ -35,7 +36,8 @@ class PlaylistRepositoryImpl @Inject constructor(
     private val playlistDao: PlaylistDao,
     private val mediaDao: MediaDao,
     private val authPreferences: AuthPreferences,
-    private val mediaFileManager: MediaFileManager
+    private val mediaFileManager: MediaFileManager,
+    private val webSocketManager: WebSocketManager
 ) : PlaylistRepository {
     private val gson = Gson()
     private val mutexSync = Mutex()
@@ -137,6 +139,7 @@ class PlaylistRepositoryImpl @Inject constructor(
             }
 
             Timber.tag(TAG).d("Playlists synced successfully. Total: ${playlistEntities.size}")
+            webSocketManager.sendReadyPlaylists()
             Result.success(Unit)
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to sync playlists")
