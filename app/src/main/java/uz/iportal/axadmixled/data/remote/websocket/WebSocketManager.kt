@@ -56,6 +56,8 @@ class WebSocketManager @Inject constructor(
     private var reconnectJob: Job? = null
     val commands: SharedFlow<WebSocketCommand> = _commands.asSharedFlow()
 
+    private val sendingMessageQueue = mutableMapOf<String, String>()
+
     fun connect() {
         // Prevent multiple simultaneous connection attempts
         if (isConnected || isConnecting) {
@@ -183,8 +185,6 @@ class WebSocketManager @Inject constructor(
     }
 
     suspend fun sendReadyPlaylists() {
-        if (!isConnected) return
-
         val readyPlaylistIds = deviceRepository.getReadyPlaylistIds()
         if (readyPlaylistIds.isNotEmpty()) {
             val message = ReadyPlaylistsMessage(
@@ -192,8 +192,30 @@ class WebSocketManager @Inject constructor(
             )
 
             val json = gson.toJson(message)
-            webSocket?.send(json)
-            Timber.tag(TAG).d("Sent ready playlists: $json")
+            send(message.type, json)
+        }
+    }
+
+    /**
+     * Send a message to the WebSocket.
+     * If the WebSocket is not connected, add the message to the queue.
+     * If the WebSocket is already connected, send the message immediately and other pending ones too.
+     *
+     * @param type The type of the message.
+     * @param json The JSON representation of the message.
+     */
+    private fun send(type: String, json: String) {
+        sendingMessageQueue[type] = json
+        if (!isConnected) return
+
+        val iterator = sendingMessageQueue.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+
+            if (webSocket?.send(entry.value) == false) break
+
+            Timber.tag(TAG).d("Sent: $json")
+            iterator.remove()
         }
     }
 
@@ -207,8 +229,6 @@ class WebSocketManager @Inject constructor(
     }
 
     private fun sendStorageUpdate(storageInfo: StorageInfo) {
-        if (!isConnected) return
-
         CoroutineScope(Dispatchers.IO).launch {
             val snNumber = authPreferences.getDeviceSnNumber() ?: return@launch
 
@@ -220,8 +240,7 @@ class WebSocketManager @Inject constructor(
             )
 
             val json = gson.toJson(message)
-            webSocket?.send(json)
-            Timber.tag(TAG).d("Sent storage update: $json")
+            send(message.type, json)
         }
     }
 
