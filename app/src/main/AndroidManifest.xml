@@ -55,7 +55,8 @@
             android:exported="false"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.AhadMixLED" />
+            android:theme="@style/Theme.AhadMixLED"
+            tools:ignore="DiscouragedApi" />
 
     </application>
 

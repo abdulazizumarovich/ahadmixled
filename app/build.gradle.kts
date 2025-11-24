@@ -27,8 +27,8 @@ android {
         applicationId = "uz.iportal.axadmixled"
         minSdk = 21
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.4"
+        versionCode = 8
+        versionName = "0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

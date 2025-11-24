@@ -3,14 +3,12 @@ package uz.iportal.axadmixled.util
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import timber.log.Timber
 import uz.iportal.axadmixled.data.remote.websocket.WebSocketManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-@UnstableApi
 class PlayerListener @Inject constructor(
     private val webSocketManager: WebSocketManager
 ) : Player.Listener {

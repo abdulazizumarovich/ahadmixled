@@ -3,10 +3,7 @@ package uz.iportal.axadmixled.data.local.storage
 import android.content.Context
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
-import android.os.Build
 import android.webkit.MimeTypeMap
-import androidx.annotation.OptIn
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -160,7 +157,6 @@ class MediaFileManager @Inject constructor(
         }
     }
 
-    @OptIn(UnstableApi::class)
     fun isCodecSupported(localPath: String?): Boolean {
         if (localPath.isNullOrEmpty()) return true // skip online media
 

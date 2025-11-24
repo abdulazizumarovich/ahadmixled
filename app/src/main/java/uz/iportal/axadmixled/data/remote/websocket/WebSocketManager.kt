@@ -19,7 +19,6 @@ import okhttp3.WebSocketListener
 import timber.log.Timber
 import uz.iportal.axadmixled.core.constants.ApiConstants
 import uz.iportal.axadmixled.data.local.preferences.AuthPreferences
-import uz.iportal.axadmixled.domain.model.DeviceStatusMessage
 import uz.iportal.axadmixled.domain.model.DeviceStorageUpdate
 import uz.iportal.axadmixled.domain.model.ReadyPlaylistsMessage
 import uz.iportal.axadmixled.domain.model.StorageInfo

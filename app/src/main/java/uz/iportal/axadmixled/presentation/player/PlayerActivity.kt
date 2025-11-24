@@ -1,14 +1,9 @@
 package uz.iportal.axadmixled.presentation.player
 
-import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
-import android.view.WindowManager
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -23,6 +18,7 @@ import uz.iportal.axadmixled.databinding.ActivityPlayerBinding
 import uz.iportal.axadmixled.domain.model.MediaType
 import uz.iportal.axadmixled.domain.model.Playlist
 import uz.iportal.axadmixled.presentation.player.components.PlaybackState
+import uz.iportal.axadmixled.util.KioskActivity
 import uz.iportal.axadmixled.util.PlayerListener
 import uz.iportal.axadmixled.util.localPathToUri
 import javax.inject.Inject
@@ -30,14 +26,12 @@ import javax.inject.Provider
 
 private const val TAG = "PlayerActivity"
 
-@UnstableApi
 @AndroidEntryPoint
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : KioskActivity() {
 
     private lateinit var binding: ActivityPlayerBinding
     private val viewModel: PlayerViewModel by viewModels()
     private var exoPlayer: ExoPlayer? = null
-//    private var mediaList = emptyList<List<Playlist>>()
 
     @Inject
     lateinit var exoPlayerProvider: Provider<ExoPlayer>
@@ -45,7 +39,6 @@ class PlayerActivity : AppCompatActivity() {
     @Inject
     lateinit var playerListener: PlayerListener
 
-    @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Timber.tag(TAG).d("PlayerActivity onCreate")
@@ -54,48 +47,13 @@ class PlayerActivity : AppCompatActivity() {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Setup full screen and immersive UI
-        setupFullScreenUI()
-
-        // Keep screen on
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         // Load current playlist and initialize player
         initializePlayer()
-
         // Observe ViewModel
         observeViewModel()
     }
 
-    private fun setupFullScreenUI() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11 and above
-                window.setDecorFitsSystemWindows(false)
-                window.insetsController?.apply {
-                    hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-                    systemBarsBehavior =
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                }
-            } else {
-                // Android 10 and below
-                @Suppress("DEPRECATION")
-                window.decorView.systemUiVisibility = (
-                        View.SYSTEM_UI_FLAG_FULLSCREEN
-                                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        )
-            }
-
-            Timber.tag(TAG).d("Full screen immersive UI configured")
-        } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Failed to setup full screen UI")
-        }
-    }
-
+    @OptIn(UnstableApi::class)
     private fun initializePlayer() {
         // Load playlist first
         viewModel.loadCurrentPlaylist()
@@ -104,7 +62,6 @@ class PlayerActivity : AppCompatActivity() {
         binding.playerView.useController = false
     }
 
-    @UnstableApi
     private fun observeViewModel() {
         // Observe current playlist
         lifecycleScope.launch {
@@ -182,7 +139,6 @@ class PlayerActivity : AppCompatActivity() {
                     .build()
             }
 
-    @OptIn(UnstableApi::class)
     private fun handlePlayerCommand(command: PlayerCommand) {
         try {
             when (command) {

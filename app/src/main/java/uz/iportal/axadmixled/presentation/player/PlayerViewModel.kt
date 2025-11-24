@@ -1,9 +1,7 @@
 package uz.iportal.axadmixled.presentation.player
 
-import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.util.UnstableApi
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,13 +23,11 @@ import javax.inject.Inject
 private const val TAG = "PlayerViewModel"
 
 @HiltViewModel
-class PlayerViewModel
-@OptIn(UnstableApi::class)
-@Inject constructor(
+class PlayerViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val webSocketManager: WebSocketManager,
-    private val playerListener: PlayerListener,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    playerListener: PlayerListener
 ) : ViewModel() {
 
     private val _currentPlaylist = MutableStateFlow<Playlist?>(null)
