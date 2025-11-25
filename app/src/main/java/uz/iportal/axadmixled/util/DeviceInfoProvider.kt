@@ -1,10 +1,11 @@
 package uz.iportal.axadmixled.util
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.util.*
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,22 +17,27 @@ class DeviceInfoProvider @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     /**
-     * Generate unique serial number for the device
-     * Uses Android ID (matching Flutter implementation - no prefix)
+     * Get or generate unique serial number for the device
+     * Uses Serial NO or Android ID and falls back to random generated if not available
      */
+    @Suppress("DEPRECATION")
+    @SuppressLint("HardwareIds")
     fun generateSerialNumber(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && Build.SERIAL != Build.UNKNOWN) {
+            return Build.SERIAL
+        }
+
         return try {
             val androidId = Settings.Secure.getString(
                 context.contentResolver,
                 Settings.Secure.ANDROID_ID
-            )
-            if (androidId.isNullOrBlank() || androidId == "9774d56d682e549c") {
-                UUID.randomUUID().toString().replace("-", "").take(16)
-            } else {
-                androidId
+            ) ?: throw IllegalStateException("Android ID not available")
+
+            if (androidId == "9774d56d682e549c") {
+                throw IllegalStateException("Android ID is a fake value")
             }
-        } catch (e: Exception) {
-            // If all else fails, generate random UUID
+            androidId
+        } catch (_: Exception) {
             UUID.randomUUID().toString().replace("-", "").take(16)
         }
     }
@@ -88,25 +94,5 @@ class DeviceInfoProvider @Inject constructor(
      */
     fun getUsedStorage(): Long {
         return getStorageCapacity() - getFreeStorage()
-    }
-
-    /**
-     * Get all device information as a map
-     */
-    fun getAllDeviceInfo(): Map<String, String> {
-        return mapOf(
-            "serial_number" to generateSerialNumber(),
-            "device_name" to getDeviceName(),
-            "device_model" to getDeviceModel(),
-            "os_version" to getOsVersion(),
-            "screen_resolution" to getScreenResolution(),
-            "storage_capacity" to getStorageCapacity().toString(),
-            "free_storage" to getFreeStorage().toString(),
-            "used_storage" to getUsedStorage().toString(),
-            "manufacturer" to Build.MANUFACTURER,
-            "brand" to Build.BRAND,
-            "hardware" to Build.HARDWARE,
-            "sdk_version" to Build.VERSION.SDK_INT.toString()
-        )
     }
 }

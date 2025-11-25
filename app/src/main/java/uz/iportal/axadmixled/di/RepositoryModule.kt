@@ -4,8 +4,14 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import uz.iportal.axadmixled.data.repository.*
-import uz.iportal.axadmixled.domain.repository.*
+import uz.iportal.axadmixled.data.repository.AuthRepositoryImpl
+import uz.iportal.axadmixled.data.repository.DeviceRepositoryImpl
+import uz.iportal.axadmixled.data.repository.PlaylistRepositoryImpl
+import uz.iportal.axadmixled.data.repository.ScreenshotRepositoryImpl
+import uz.iportal.axadmixled.domain.repository.AuthRepository
+import uz.iportal.axadmixled.domain.repository.DeviceRepository
+import uz.iportal.axadmixled.domain.repository.PlaylistRepository
+import uz.iportal.axadmixled.domain.repository.ScreenshotRepository
 import javax.inject.Singleton
 
 @Module
@@ -29,12 +35,6 @@ abstract class RepositoryModule {
     abstract fun bindPlaylistRepository(
         playlistRepositoryImpl: PlaylistRepositoryImpl
     ): PlaylistRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindMediaRepository(
-        mediaRepositoryImpl: MediaRepositoryImpl
-    ): MediaRepository
 
     @Binds
     @Singleton

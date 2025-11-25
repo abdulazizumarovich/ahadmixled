@@ -22,7 +22,7 @@ class TokenRefreshWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            Timber.d("TokenRefreshWorker: Starting token refresh")
+            Timber.tag(TAG).d("Starting token refresh")
 
             if (!authRepository.isAuthenticated()) {
                 Timber.w("TokenRefreshWorker: User not authenticated, skipping refresh")
@@ -33,7 +33,7 @@ class TokenRefreshWorker @AssistedInject constructor(
 
             result.fold(
                 onSuccess = {
-                    Timber.d("TokenRefreshWorker: Token refreshed successfully")
+                    Timber.tag(TAG).d("Token refreshed successfully")
                     Result.success()
                 },
                 onFailure = { exception ->
@@ -42,12 +42,13 @@ class TokenRefreshWorker @AssistedInject constructor(
                 }
             )
         } catch (e: Exception) {
-            Timber.e(e, "TokenRefreshWorker: Unexpected error")
+            Timber.tag(TAG).e("Unexpected error")
             Result.retry()
         }
     }
 
     companion object {
         const val WORK_NAME = "token_refresh_work"
+        const val TAG = "TokenRefreshWorker"
     }
 }

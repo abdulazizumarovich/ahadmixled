@@ -19,7 +19,7 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun login(request: LoginRequest): Result<AuthTokens> {
         return try {
-            Timber.tag("TAGDF").d("Attempting login for user: ${request.username}")
+            Timber.tag(TAG).d("Attempting login for user: ${request.username}")
             val response = authApiProvider.get().login(request)
 
 
@@ -30,10 +30,10 @@ class AuthRepositoryImpl @Inject constructor(
             )
 
             saveTokens(tokens)
-            Timber.tag("TAGDF").d("Login successful")
+            Timber.tag(TAG).d("Login successful")
             Result.success(tokens)
         } catch (e: Exception) {
-            Timber.tag("TAGDF").e(e, "Login failed")
+            Timber.tag(TAG).e(e, "Login failed")
             Result.failure(e)
         }
     }
@@ -42,11 +42,11 @@ class AuthRepositoryImpl @Inject constructor(
         return try {
             val refreshToken = getRefreshToken()
             if (refreshToken.isNullOrEmpty()) {
-                Timber.e("No refresh token available")
+                Timber.tag(TAG).e("No refresh token available")
                 return Result.failure(Exception("No refresh token available"))
             }
 
-            Timber.d("Refreshing access token")
+            Timber.tag(TAG).d("Refreshing access token")
             val request = RefreshTokenRequest(refresh = refreshToken)
             val response = authApiProvider.get().refreshToken(request)
             val tokens = AuthTokens(
@@ -56,10 +56,10 @@ class AuthRepositoryImpl @Inject constructor(
             )
 
             saveTokens(tokens)
-            Timber.tag("TAGDF").d("Token refresh successful")
+            Timber.tag(TAG).d("Token refresh successful")
             Result.success(tokens)
         } catch (e: Exception) {
-            Timber.tag("TAGDF").e(e, "Token refresh failed")
+            Timber.tag(TAG).e(e, "Token refresh failed")
             Result.failure(e)
         }
     }
@@ -71,7 +71,7 @@ class AuthRepositoryImpl @Inject constructor(
             val oneHourFromNow = System.currentTimeMillis() + (60 * 60 * 1000)
 
             if (expiresAt <= oneHourFromNow) {
-                Timber.tag("TAGDF").d("Token expired or expiring soon, refreshing...")
+                Timber.tag(TAG).d("Token expired or expiring soon, refreshing...")
                 refreshToken()
             } else {
                 val accessToken = getAccessToken()
@@ -89,7 +89,7 @@ class AuthRepositoryImpl @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            Timber.tag("TAGDF").e(e, "Failed to check/refresh token")
+            Timber.tag(TAG).e(e, "Failed to check/refresh token")
             Result.failure(e)
         }
     }
@@ -110,11 +110,15 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun saveTokens(tokens: AuthTokens) {
         authPreferences.saveTokens(tokens)
-        Timber.tag("TAGDF").d("Tokens saved successfully")
+        Timber.tag(TAG).d("Tokens saved successfully")
     }
 
     override suspend fun clearTokens() {
         authPreferences.clearTokens()
-        Timber.tag("TAGDF").d("Tokens cleared")
+        Timber.tag(TAG).d("Tokens cleared")
+    }
+    
+    companion object {
+        private const val TAG = "AuthRepository"
     }
 }

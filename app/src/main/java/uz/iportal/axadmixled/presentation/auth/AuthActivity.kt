@@ -25,7 +25,7 @@ class AuthActivity : KioskActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Timber.d("AuthActivity onCreate")
+        Timber.tag(TAG).d("AuthActivity onCreate")
 
         // Setup ViewBinding
         binding = ActivityAuthBinding.inflate(layoutInflater)
@@ -50,7 +50,7 @@ class AuthActivity : KioskActivity() {
             val password = binding.etPassword.text?.toString() ?: ""
             val ip = binding.etIp.text?.toString() ?: ""
 
-            Timber.d("Login button clicked")
+            Timber.tag(TAG).d("Login button clicked")
             viewModel.login(ip, username, password)
         }
 
@@ -89,14 +89,14 @@ class AuthActivity : KioskActivity() {
     private fun handleLoginState(state: LoginState) {
         when (state) {
             is LoginState.Idle -> {
-                Timber.d("Login state: Idle")
+                Timber.tag(TAG).d("Login state: Idle")
                 binding.progressBar.visibility = View.GONE
                 binding.btnLogin.isEnabled = true
                 binding.etUsername.isEnabled = true
                 binding.etPassword.isEnabled = true
             }
             is LoginState.Loading -> {
-                Timber.d("Login state: Loading")
+                Timber.tag(TAG).d("Login state: Loading")
                 binding.progressBar.visibility = View.VISIBLE
                 binding.btnLogin.isEnabled = false
                 binding.etUsername.isEnabled = false
@@ -105,12 +105,12 @@ class AuthActivity : KioskActivity() {
                 binding.tilPassword.error = null
             }
             is LoginState.Success -> {
-                Timber.d("Login state: Success")
+                Timber.tag(TAG).d("Login state: Success")
                 binding.progressBar.visibility = View.GONE
                 Toast.makeText(this, "Login successful", Toast.LENGTH_SHORT).show()
             }
             is LoginState.Error -> {
-                Timber.tag("TAGDF").e("Login state: Error - ${state.message}")
+                Timber.tag(TAG).e("Login state: Error - ${state.message}")
                 binding.progressBar.visibility = View.GONE
                 binding.btnLogin.isEnabled = true
                 binding.etUsername.isEnabled = true
@@ -132,7 +132,7 @@ class AuthActivity : KioskActivity() {
     private fun handleNavigationEvent(event: NavigationEvent) {
         when (event) {
             is NavigationEvent.NavigateToPlayer -> {
-                Timber.d("Navigating to PlayerActivity")
+                Timber.tag(TAG).d("Navigating to PlayerActivity")
                 navigateToPlayer()
             }
         }
@@ -146,7 +146,7 @@ class AuthActivity : KioskActivity() {
 
     override fun onResume() {
         super.onResume()
-        Timber.d("AuthActivity onResume")
+        Timber.tag(TAG).d("AuthActivity onResume")
 
         // Reset state when resuming
         viewModel.resetState()
@@ -154,11 +154,15 @@ class AuthActivity : KioskActivity() {
 
     override fun onPause() {
         super.onPause()
-        Timber.d("AuthActivity onPause")
+        Timber.tag(TAG).d("AuthActivity onPause")
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Timber.d("AuthActivity onDestroy")
+        Timber.tag(TAG).d("AuthActivity onDestroy")
+    }
+    
+    companion object {
+        private const val TAG = "AuthActivity"
     }
 }

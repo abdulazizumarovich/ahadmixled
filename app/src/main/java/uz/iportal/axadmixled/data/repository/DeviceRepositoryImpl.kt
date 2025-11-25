@@ -12,6 +12,7 @@ import uz.iportal.axadmixled.domain.model.DeviceRegisterRequest
 import uz.iportal.axadmixled.domain.model.DeviceRegisterResponse
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
 import uz.iportal.axadmixled.util.DeviceInfoProvider
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -29,7 +30,7 @@ class DeviceRepositoryImpl @Inject constructor(
         return try {
             val accessToken = authPreferences.getAccessToken()
             if (accessToken.isNullOrEmpty()) {
-                Timber.e("No access token available for device registration")
+                Timber.tag(TAG).e("No access token available for device registration")
                 return Result.failure(Exception("Not authenticated"))
             }
 
@@ -56,7 +57,7 @@ class DeviceRepositoryImpl @Inject constructor(
                 volume = 50
             )
 
-            Timber.d("Sending device registration request: $request")
+            Timber.tag(TAG).d("Sending device registration request: $request")
 
             val response = deviceApiProvider.get().registerDevice(
                 token = "Bearer $accessToken",
@@ -65,17 +66,17 @@ class DeviceRepositoryImpl @Inject constructor(
 
             // Save device info locally
             val deviceEntity = DeviceEntity(
-                id = response.data?.id?:0,
-                snNumber = response.data?.snNumber?:"0",
-                name = response.data?.snNumber?:"",
+                id = response.data?.id ?: 0,
+                snNumber = response.data?.snNumber ?: "0",
+                name = response.data?.snNumber ?: "",
                 model = Build.MODEL,
                 androidVersion = "Android ${Build.VERSION.RELEASE}",
-                screenResolution = getScreenResolution(),
+                screenResolution = request.screenResolution,
                 storageTotal = totalStorage,
                 storageFree = freeStorage,
                 storageUsed = totalStorage - freeStorage,
                 isActive = true,
-                createdAt = response.data?.snNumber?:"",
+                createdAt = response.data?.snNumber ?: "",
                 registeredAt = System.currentTimeMillis()
             )
             deviceDao.insertDevice(deviceEntity)
@@ -83,10 +84,9 @@ class DeviceRepositoryImpl @Inject constructor(
             // Save SN number in preferences
             authPreferences.saveDeviceSnNumber(snNumber)
 
-//            Timber.d("Device registered successfully: ${response.name} (ID: ${response.id})")
             Result.success(response)
         } catch (e: Exception) {
-            Timber.e(e, "Device registration failed: ${e.message}")
+            Timber.tag(TAG).e(e, "Device registration failed: ${e.message}")
             Result.failure(e)
         }
     }
@@ -97,11 +97,11 @@ class DeviceRepositoryImpl @Inject constructor(
             val snNumber = authPreferences.getDeviceSnNumber()
 
             if (accessToken.isNullOrEmpty() || snNumber.isNullOrEmpty()) {
-                Timber.e("Missing authentication or device SN")
+                Timber.tag(TAG).e("Missing authentication or device SN")
                 return Result.failure(Exception("Not authenticated or device not registered"))
             }
 
-            Timber.d("Fetching device info for SN: $snNumber")
+            Timber.tag(TAG).d("Fetching device info for SN: $snNumber")
             val device = deviceApiProvider.get().getDeviceInfo(
                 token = "Bearer $accessToken",
                 snNumber = snNumber
@@ -124,10 +124,10 @@ class DeviceRepositoryImpl @Inject constructor(
             )
             deviceDao.insertDevice(deviceEntity)
 
-            Timber.d("Device info fetched successfully")
+            Timber.tag(TAG).d("Device info fetched successfully")
             Result.success(device)
         } catch (e: Exception) {
-            Timber.e(e, "Failed to fetch device info")
+            Timber.tag(TAG).e(e, "Failed to fetch device info")
             Result.failure(e)
         }
     }
@@ -145,9 +145,9 @@ class DeviceRepositoryImpl @Inject constructor(
     override suspend fun updateStorageInfo(total: Long, free: Long, used: Long) {
         try {
             deviceDao.updateStorage(total = total, free = free, used = used)
-            Timber.d("Storage info updated: total=$total, free=$free, used=$used")
+            Timber.tag(TAG).d("Storage info updated: total=$total, free=$free, used=$used")
         } catch (e: Exception) {
-            Timber.e(e, "Failed to update storage info")
+            Timber.tag(TAG).e(e, "Failed to update storage info")
         }
     }
 
@@ -155,32 +155,25 @@ class DeviceRepositoryImpl @Inject constructor(
         return try {
             playlistDao.getReadyPlaylistIds()
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get ready playlist IDs")
+            Timber.tag(TAG).e(e, "Failed to get ready playlist IDs")
             emptyList()
         }
     }
 
     private fun getOrGenerateSnNumber(): String {
         val existingSn = authPreferences.getDeviceSnNumber()
-
-        // Check if existing SN is valid (not the old "LED-" prefixed format or literal "LED-ANDROID_ID")
-        val isValidSn = !existingSn.isNullOrEmpty() &&
-                !existingSn.startsWith("LED-") &&
-                existingSn != "LED-ANDROID_ID" &&
-                existingSn != "ANDROID_ID"
-
-        if (isValidSn) {
-            Timber.d("Using existing valid SN: $existingSn")
+        if (!existingSn.isNullOrEmpty()) {
+            Timber.tag(TAG).d("Using existing valid SN: $existingSn")
             return existingSn
         }
 
         if (!existingSn.isNullOrEmpty()) {
-            Timber.w("Invalid SN detected: '$existingSn', regenerating...")
+            Timber.tag(TAG).w("Invalid SN detected: '$existingSn', regenerating...")
         }
 
         // Generate unique SN using DeviceInfoProvider (matches Flutter implementation)
         val snNumber = deviceInfoProvider.generateSerialNumber()
-        Timber.d("Generated new device SN: $snNumber")
+        Timber.tag(TAG).d("Generated new device SN: $snNumber")
 
         authPreferences.saveDeviceSnNumber(snNumber)
         return snNumber
@@ -200,7 +193,7 @@ class DeviceRepositoryImpl @Inject constructor(
             val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
             stat.totalBytes
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get total storage")
+            Timber.tag(TAG).e(e, "Failed to get total storage")
             0L
         }
     }
@@ -210,7 +203,7 @@ class DeviceRepositoryImpl @Inject constructor(
             val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
             stat.availableBytes
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get free storage")
+            Timber.tag(TAG).e(e, "Failed to get free storage")
             0L
         }
     }
@@ -218,7 +211,7 @@ class DeviceRepositoryImpl @Inject constructor(
     private fun formatStorage(bytes: Long): String {
         return try {
             val gb = bytes / (1024.0 * 1024.0 * 1024.0)
-            String.format("%.2f GB", gb)
+            String.format(Locale.ENGLISH, "%.2f GB", gb)
         } catch (e: Exception) {
             "0 GB"
         }
@@ -245,7 +238,7 @@ class DeviceRepositoryImpl @Inject constructor(
             }
             null
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get MAC address")
+            Timber.tag(TAG).e(e, "Failed to get MAC address")
             null
         }
     }
@@ -273,8 +266,12 @@ class DeviceRepositoryImpl @Inject constructor(
             }
             null
         } catch (e: Exception) {
-            Timber.e(e, "Failed to get IP address")
+            Timber.tag(TAG).e(e, "Failed to get IP address")
             null
         }
+    }
+
+    companion object {
+        private const val TAG = "DeviceRepository"
     }
 }

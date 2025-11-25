@@ -29,4 +29,7 @@ interface MediaDao {
 
     @Query("DELETE FROM media WHERE playlist_id = :playlistId")
     suspend fun deleteMediaByPlaylistId(playlistId: Int)
+
+    @Query("DELETE FROM media WHERE playlist_id NOT IN (:playlistIds)")
+    suspend fun cleanOtherThanGivenPlaylists(playlistIds: List<Int>)
 }

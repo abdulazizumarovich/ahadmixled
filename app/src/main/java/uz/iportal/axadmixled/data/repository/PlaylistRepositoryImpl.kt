@@ -24,6 +24,8 @@ import uz.iportal.axadmixled.domain.model.MediaType
 import uz.iportal.axadmixled.domain.model.Playlist
 import uz.iportal.axadmixled.domain.repository.PlaylistRepository
 import uz.iportal.axadmixled.util.Constants
+import uz.iportal.axadmixled.util.matches
+import uz.iportal.axadmixled.util.notMatches
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -104,10 +106,10 @@ class PlaylistRepositoryImpl @Inject constructor(
                 val mediaEntities = playlistDetail.mediaItems.map { mediaDetail ->
                     // Check if media already exists locally
                     val existingMedia = mediaDao.getMediaById(mediaDetail.mediaId)
-                    val localPath = existingMedia?.localPath
-                        ?: mediaFileManager.getMediaPath(mediaDetail.mediaId)
-
-                    val isDownloaded = mediaFileManager.verifyChecksum(localPath ?: "", mediaDetail.checksum)
+                    val localPath = existingMedia?.localPath ?: mediaFileManager.getMediaPath(
+                        mediaId = mediaDetail.mediaId,
+                        playlistId = playlistDetail.id
+                    )
 
                     val entity = MediaEntity(
                         id = mediaDetail.mediaId,
@@ -125,7 +127,7 @@ class PlaylistRepositoryImpl @Inject constructor(
                         createdAt = mediaDetail.downloadDate,
                         updatedAt = mediaDetail.downloadDate,
                         localPath = localPath,
-                        isDownloaded = isDownloaded,
+                        isDownloaded = mediaDetail.checksum matches localPath,
                         downloadedAt = existingMedia?.downloadedAt,
                         downloadProgress = existingMedia?.downloadProgress ?: 0
                     )
@@ -135,7 +137,8 @@ class PlaylistRepositoryImpl @Inject constructor(
                 }
 
                 mediaDao.insertMediaList(mediaEntities)
-                Timber.tag(TAG).d("Updated ${mediaEntities.size} media for playlist ${playlistDetail.id}")
+                Timber.tag(TAG)
+                    .d("Updated ${mediaEntities.size} media for playlist ${playlistDetail.id}")
             }
 
             Timber.tag(TAG).d("Playlists synced successfully. Total: ${playlistEntities.size}")
@@ -167,7 +170,7 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun getPlaylists(): List<Playlist> {
         return try {
-            val playlistEntities = playlistDao.getAllPlaylists()
+            val playlistEntities = playlistDao.getAll()
             playlistEntities.map { entity -> mapEntityToDomain(entity) }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to get playlists from database")
@@ -209,11 +212,6 @@ class PlaylistRepositoryImpl @Inject constructor(
         return try {
             Timber.tag(TAG).d("Starting download for playlist: $playlistId")
 
-            if (DownloadStatus.READY.name == playlistDao.getDownloadStatusById(playlistId)) {
-                Timber.tag(TAG).d("Playlist: $playlistId is already downloaded, skipping")
-                return Result.success(Unit)
-            }
-
             // Update status to DOWNLOADING
             playlistDao.updateDownloadStatus(
                 playlistId = playlistId,
@@ -228,12 +226,9 @@ class PlaylistRepositoryImpl @Inject constructor(
             for (media in mediaList) {
                 try {
                     // Skip if already downloaded
-                    if (media.isDownloaded && !media.localPath.isNullOrEmpty()) {
-                        val file = java.io.File(media.localPath)
-                        if (file.exists()) {
-                            downloadedCount++
-                            continue
-                        }
+                    if (media.isDownloaded && media.checksum matches media.localPath) {
+                        downloadedCount++
+                        continue
                     }
 
                     Timber.tag(TAG).d("URL: Downloading media: ${media.name} (${media.id})")
@@ -242,7 +237,8 @@ class PlaylistRepositoryImpl @Inject constructor(
                     var lastLogged = -1
                     val localPath = mediaFileManager.downloadMedia(
                         url = media.file,
-                        mediaId = media.id
+                        mediaId = media.id,
+                        playlistId = playlistId
                     ) { progress ->
                         val throttled = progress / 5 // log every 5%
                         if (throttled != lastLogged) {
@@ -251,26 +247,26 @@ class PlaylistRepositoryImpl @Inject constructor(
                         }
                     }
 
-                    if (localPath != null) {
-                        // Verify checksum if available
-                        val isValid = mediaFileManager.verifyChecksum(localPath, media.checksum)
-
-                        if (isValid) {
-                            mediaDao.markAsDownloaded(
-                                mediaId = media.id,
-                                localPath = localPath,
-                                downloadedAt = System.currentTimeMillis()
-                            )
-                            downloadedCount++
-                            Timber.tag(TAG).d("Media downloaded successfully: ${media.name}")
-                        } else {
-                            Timber.tag(TAG).e("Checksum verification failed for media: ${media.name}")
-                            missingFiles.add(media.name)
-                        }
-                    } else {
+                    if (localPath == null) {
                         Timber.tag(TAG).e("Failed to download media: ${media.name}")
                         missingFiles.add(media.name)
+                        continue
                     }
+
+                    // Verify checksum if available
+                    if (media.checksum notMatches localPath) {
+                        Timber.tag(TAG).e("Checksum verification failed for media: ${media.name}")
+                        missingFiles.add(media.name)
+                        continue
+                    }
+
+                    mediaDao.markAsDownloaded(
+                        mediaId = media.id,
+                        localPath = localPath,
+                        downloadedAt = System.currentTimeMillis()
+                    )
+                    downloadedCount++
+                    Timber.tag(TAG).d("Media downloaded successfully: ${media.name}")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -286,21 +282,23 @@ class PlaylistRepositoryImpl @Inject constructor(
                 else -> DownloadStatus.FAILED
             }
 
-            val playlist = playlistDao.getPlaylistById(playlistId)
-            if (playlist != null) {
-                val updatedPlaylist = playlist.copy(
-                    downloadStatus = finalStatus.name,
-                    missingFiles = if (missingFiles.isNotEmpty()) {
-                        gson.toJson(missingFiles)
-                    } else null
+            playlistDao.getPlaylistById(playlistId)?.let {
+                playlistDao.updatePlaylist(
+                    playlist = it.copy(
+                        downloadStatus = finalStatus.name,
+                        missingFiles = if (missingFiles.isNotEmpty()) {
+                            gson.toJson(missingFiles)
+                        } else null
+                    )
                 )
-                playlistDao.updatePlaylist(updatedPlaylist)
             }
 
-            Timber.tag(TAG).d("Playlist download completed: $downloadedCount/${mediaList.size} items")
+            Timber.tag(TAG).d("Playlist download completed: " +
+                    "$downloadedCount/${mediaList.size} items")
             Result.success(Unit)
         } catch (e: CancellationException) {
-            Timber.tag(TAG).e("Download playlist: $playlistId cancelled due to coroutine cancellation")
+            Timber.tag(TAG)
+                .e("Download playlist: $playlistId cancelled due to coroutine cancellation")
             playlistDao.updateDownloadStatus(
                 playlistId = playlistId,
                 status = DownloadStatus.FAILED.name,
@@ -323,7 +321,7 @@ class PlaylistRepositoryImpl @Inject constructor(
         withContext(Dispatchers.IO) {
             try {
                 Timber.tag(TAG).d("Starting background download for remaining playlists")
-                val playlists = playlistDao.getAllPlaylists()
+                val playlists = playlistDao.getAll()
 
                 for (playlist in playlists) {
                     // Skip playlists that are already READY
@@ -351,26 +349,9 @@ class PlaylistRepositoryImpl @Inject constructor(
     override suspend fun cleanupOldPlaylists(playlistIdsToKeep: List<Int>) {
         try {
             Timber.tag(TAG).d("Cleaning up old playlists, keeping: $playlistIdsToKeep")
-
-            // Get all playlists that will be deleted
-            val allPlaylists = playlistDao.getAllPlaylists()
-            val playlistsToDelete = allPlaylists.filter { it.id !in playlistIdsToKeep }
-
-            // Delete media files for playlists to be removed
-            for (playlist in playlistsToDelete) {
-                val mediaList = mediaDao.getMediaByPlaylistId(playlist.id)
-                for (media in mediaList) {
-                    if (!media.localPath.isNullOrEmpty()) {
-                        mediaFileManager.deleteMedia(media.localPath)
-                    }
-                }
-            }
-
-            // Delete playlists from database (cascade will delete media)
-            if (playlistIdsToKeep.isNotEmpty()) {
-                playlistDao.deletePlaylistsNotIn(playlistIdsToKeep)
-            }
-
+            mediaDao.cleanOtherThanGivenPlaylists(playlistIdsToKeep)
+            mediaFileManager.cleanPlaylistFolders(playlistIdsToKeep)
+            playlistDao.deletePlaylistsNotIn(playlistIdsToKeep)
             Timber.tag(TAG).d("Old playlists cleaned up successfully")
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to cleanup old playlists")
@@ -379,29 +360,28 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     private suspend fun mapEntityToDomain(entity: PlaylistEntity): Playlist {
         val mediaEntities = mediaDao.getMediaByPlaylistId(entity.id)
-        val mediaList = mediaEntities//.filter {
-//            it.mediaType == MediaType.IMAGE.name || mediaFileManager.isCodecSupported(it.localPath)
-        .map { mediaEntity ->
-            Media(
-                id = mediaEntity.id,
-                name = mediaEntity.name,
-                description = mediaEntity.description,
-                file = mediaEntity.file,
-                thumbnail = mediaEntity.thumbnail,
-                mediaType = MediaType.fromString(mediaEntity.mediaType),
-                duration = mediaEntity.duration,
-                fileSize = mediaEntity.fileSize,
-                resolution = mediaEntity.resolution,
-                checksum = mediaEntity.checksum,
-                order = mediaEntity.order,
-                createdAt = mediaEntity.createdAt,
-                updatedAt = mediaEntity.updatedAt,
-                localPath = mediaEntity.localPath,
-                isDownloaded = mediaEntity.isDownloaded,
-                downloadedAt = mediaEntity.downloadedAt,
-                downloadProgress = mediaEntity.downloadProgress
-            )
-        }
+        val mediaList = mediaEntities
+            .map { mediaEntity ->
+                Media(
+                    id = mediaEntity.id,
+                    name = mediaEntity.name,
+                    description = mediaEntity.description,
+                    file = mediaEntity.file,
+                    thumbnail = mediaEntity.thumbnail,
+                    mediaType = MediaType.fromString(mediaEntity.mediaType),
+                    duration = mediaEntity.duration,
+                    fileSize = mediaEntity.fileSize,
+                    resolution = mediaEntity.resolution,
+                    checksum = mediaEntity.checksum,
+                    order = mediaEntity.order,
+                    createdAt = mediaEntity.createdAt,
+                    updatedAt = mediaEntity.updatedAt,
+                    localPath = mediaEntity.localPath,
+                    isDownloaded = mediaEntity.isDownloaded,
+                    downloadedAt = mediaEntity.downloadedAt,
+                    downloadProgress = mediaEntity.downloadProgress
+                )
+            }
 
         require(mediaList.isNotEmpty()) { "No supported media for playlist" }
 
