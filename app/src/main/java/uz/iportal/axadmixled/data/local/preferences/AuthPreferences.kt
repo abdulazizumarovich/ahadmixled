@@ -13,7 +13,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthPreferences @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext context: Context
 ) {
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)

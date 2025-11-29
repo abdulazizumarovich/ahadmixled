@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.gms.google.services)
@@ -96,7 +97,8 @@ android {
         outputs.all {
             val versionCode = defaultConfig.versionCode
             val versionName = defaultConfig.versionName
-            val versionNameSuffix = variant.productFlavors.firstOrNull()?.versionNameSuffix.orEmpty()
+            val versionNameSuffix =
+                variant.productFlavors.firstOrNull()?.versionNameSuffix.orEmpty()
             val debugInfo = if (buildType.name == "debug") "_debug" else ""
 
             (this as BaseVariantOutputImpl).outputFileName =
@@ -106,84 +108,70 @@ android {
 }
 
 dependencies {
-    // Core Android
+
+    // Core & UI
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
-    implementation(libs.material)
+    implementation(libs.androidx.activity.ktx)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.material)
 
     // Lifecycle
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    implementation(libs.androidx.activity.ktx)
-    implementation(libs.androidx.fragment.ktx)
-
-    // Compose (optional - keep for future use)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
 
     // Coroutines
-    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.android)
 
-    // Room Database
+    // Datastore
+    implementation(libs.androidx.datastore)
+    implementation(libs.kotlinx.serialization.json)
+
+    // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    implementation(libs.firebase.crashlytics)
     ksp(libs.androidx.room.compiler)
+
+    // Media3
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.common)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.okhttp)
+
+    // Image loading
+    implementation(libs.coil)
 
     // Networking
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
-
-    // JSON
     implementation(libs.gson)
 
-    // Media Player (Media3/ExoPlayer)
-    implementation(libs.media3.exoplayer)
-    implementation(libs.media3.common)
-    implementation(libs.media3.okhttp)
-    implementation(libs.media3.ui)
-
-    // Image Loading
-    implementation(libs.coil)
-
-    // Dependency Injection (Hilt)
-    implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
-
-    // Hilt WorkManager Integration
-    implementation(libs.androidx.hilt.work)
-    ksp(libs.androidx.hilt.compiler)
-
-    // Encrypted SharedPreferences
+    // Security
     implementation(libs.androidx.security.crypto)
 
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
 
-    // Logging
+    // Hilt
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    ksp(libs.androidx.hilt.compiler)
+
+    // Logging & Debug
     implementation(libs.timber)
-
-    // Chucker
     debugImplementation(libs.chucker)
     releaseImplementation(libs.chucker.no.op)
 
-    // leak canary
-//    debugImplementation(libs.leakcanary)
+    // Firebase / Google
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.play.services.time)
 
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.ui.test.junit4)
-    debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
 }

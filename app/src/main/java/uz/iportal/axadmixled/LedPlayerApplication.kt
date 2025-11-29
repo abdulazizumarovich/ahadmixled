@@ -1,9 +1,11 @@
 package uz.iportal.axadmixled
 
 import android.app.Application
+import android.util.Log
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
+import uz.iportal.axadmixled.domain.repository.TimeRepository
 import uz.iportal.axadmixled.util.FileLoggingTree
 import uz.iportal.axadmixled.util.StorageMonitor
 import uz.iportal.axadmixled.workers.LedPlayerWorkerFactory
@@ -12,6 +14,9 @@ import javax.inject.Inject
 
 @HiltAndroidApp
 class LedPlayerApplication : Application(), Configuration.Provider {
+
+    @Inject
+    lateinit var timeRepository: TimeRepository
 
     @Inject
     lateinit var storageMonitor: StorageMonitor
@@ -23,8 +28,10 @@ class LedPlayerApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        timeRepository.initialize(this)
 
         // Initialize Timber for logging
+        @Suppress("KotlinConstantConditions")
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         } else {
@@ -48,9 +55,10 @@ class LedPlayerApplication : Application(), Configuration.Provider {
         super.onTerminate()
     }
 
+    @Suppress("KotlinConstantConditions")
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(ledPlayerWorkerFactory)
-            .setMinimumLoggingLevel(if (BuildConfig.DEBUG) android.util.Log.DEBUG else android.util.Log.ERROR)
+            .setMinimumLoggingLevel(if (BuildConfig.DEBUG) Log.DEBUG else Log.ERROR)
             .build()
 }

@@ -24,18 +24,16 @@ class PlaylistSyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            Timber.d("PlaylistSyncWorker: Starting playlist sync")
+            Timber.tag(TAG).d("Starting playlist sync")
 
             if (!authRepository.isAuthenticated()) {
-                Timber.w("PlaylistSyncWorker: User not authenticated, skipping sync")
+                Timber.tag(TAG).w("User not authenticated, skipping sync")
                 return Result.failure()
             }
 
-            val result = playlistRepository.syncPlaylists()
-
-            result.fold(
+            playlistRepository.syncPlaylists().fold(
                 onSuccess = {
-                    Timber.d("PlaylistSyncWorker: Playlists synced successfully")
+                    Timber.tag(TAG).d("Playlists synced successfully")
 
                     // Start background download for remaining playlists
                     playlistRepository.downloadRemainingPlaylistsInBackground()
@@ -43,17 +41,18 @@ class PlaylistSyncWorker @AssistedInject constructor(
                     Result.success()
                 },
                 onFailure = { exception ->
-                    Timber.e(exception, "PlaylistSyncWorker: Failed to sync playlists")
+                    Timber.tag(TAG).e(exception, "Failed to sync playlists")
                     Result.retry()
                 }
             )
         } catch (e: Exception) {
-            Timber.e(e, "PlaylistSyncWorker: Unexpected error")
+            Timber.tag(TAG).e(e, "Unexpected error")
             Result.retry()
         }
     }
 
     companion object {
+        const val TAG = "PlaylistSyncWorker"
         const val WORK_NAME = "playlist_sync_work"
     }
 }

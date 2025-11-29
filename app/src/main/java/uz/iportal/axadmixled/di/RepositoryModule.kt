@@ -8,10 +8,12 @@ import uz.iportal.axadmixled.data.repository.AuthRepositoryImpl
 import uz.iportal.axadmixled.data.repository.DeviceRepositoryImpl
 import uz.iportal.axadmixled.data.repository.PlaylistRepositoryImpl
 import uz.iportal.axadmixled.data.repository.ScreenshotRepositoryImpl
+import uz.iportal.axadmixled.data.repository.TimeRepositoryImpl
 import uz.iportal.axadmixled.domain.repository.AuthRepository
 import uz.iportal.axadmixled.domain.repository.DeviceRepository
 import uz.iportal.axadmixled.domain.repository.PlaylistRepository
 import uz.iportal.axadmixled.domain.repository.ScreenshotRepository
+import uz.iportal.axadmixled.domain.repository.TimeRepository
 import javax.inject.Singleton
 
 @Module
@@ -41,4 +43,10 @@ abstract class RepositoryModule {
     abstract fun bindScreenshotRepository(
         screenshotRepositoryImpl: ScreenshotRepositoryImpl
     ): ScreenshotRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTimeRepository(
+        timeRepositoryImpl: TimeRepositoryImpl
+    ): TimeRepository
 }

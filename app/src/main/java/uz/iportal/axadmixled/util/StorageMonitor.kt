@@ -1,12 +1,15 @@
 package uz.iportal.axadmixled.util
 
-import android.content.Context
 import android.os.StatFs
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import uz.iportal.axadmixled.data.local.storage.MediaFileManager
 import uz.iportal.axadmixled.domain.model.StorageInfo
@@ -15,7 +18,6 @@ import javax.inject.Singleton
 
 @Singleton
 class StorageMonitor @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val mediaFileManager: MediaFileManager
 ) {
     private val _storageUpdates = MutableSharedFlow<StorageInfo>(replay = 1)

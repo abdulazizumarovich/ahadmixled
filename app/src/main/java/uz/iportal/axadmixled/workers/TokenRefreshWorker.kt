@@ -25,24 +25,22 @@ class TokenRefreshWorker @AssistedInject constructor(
             Timber.tag(TAG).d("Starting token refresh")
 
             if (!authRepository.isAuthenticated()) {
-                Timber.w("TokenRefreshWorker: User not authenticated, skipping refresh")
+                Timber.tag(TAG).w("User not authenticated, skipping refresh")
                 return Result.success()
             }
 
-            val result = authRepository.refreshTokenIfNeeded()
-
-            result.fold(
+            authRepository.refreshTokenIfNeeded().fold(
                 onSuccess = {
                     Timber.tag(TAG).d("Token refreshed successfully")
                     Result.success()
                 },
                 onFailure = { exception ->
-                    Timber.e(exception, "TokenRefreshWorker: Failed to refresh token")
+                    Timber.tag(TAG).e(exception, "TokenRefreshWorker: Failed to refresh token")
                     Result.retry()
                 }
             )
         } catch (e: Exception) {
-            Timber.tag(TAG).e("Unexpected error")
+            Timber.tag(TAG).e(e, "Unexpected error")
             Result.retry()
         }
     }
